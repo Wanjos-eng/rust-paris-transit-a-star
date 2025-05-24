@@ -1,0 +1,1 @@
+/home/sojnaw/Documentos/Dev/rust-paris-transit-a-star/metro_paris_astar/target/debug/metro_paris_astar: /home/sojnaw/Documentos/Dev/rust-paris-transit-a-star/metro_paris_astar/src/dados_metro.rs /home/sojnaw/Documentos/Dev/rust-paris-transit-a-star/metro_paris_astar/src/grafo_metro.rs /home/sojnaw/Documentos/Dev/rust-paris-transit-a-star/metro_paris_astar/src/main.rs
