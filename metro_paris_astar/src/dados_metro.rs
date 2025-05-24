@@ -93,14 +93,22 @@ impl GrafoMetro {
         for (id_linha_atual, resultado_linha) in leitor_dist.records().enumerate() {
             if id_linha_atual >= NUMERO_ESTACOES { break; }
             let registro = resultado_linha?;
+            
+            println!("[DEBUG LEITURA TABELA2] Linha {}: {:?}", id_linha_atual + 1, registro);
+            
             for id_coluna_destino in 0..NUMERO_ESTACOES {
                 let indice_no_csv = id_coluna_destino + 1;
                 if indice_no_csv < registro.len() {
                     if let Some(valor_str) = registro.get(indice_no_csv) {
+                        println!("[DEBUG TABELA2] Origem E{} -> Destino E{}: '{}'", 
+                                 id_linha_atual + 1, id_coluna_destino + 1, valor_str);
                         if !valor_str.trim().is_empty() {
                             if let Ok(valor_f32) = valor_str.trim().replace(',', ".").parse::<f32>() {
+                                println!("[DEBUG TABELA2] Parseia ok: {} ({})", valor_f32, valor_f32 > 0.0);
                                 if valor_f32 > 0.0 {
                                     matriz_distancias_reais[id_linha_atual][id_coluna_destino] = Some(valor_f32);
+                                    println!("[DEBUG TABELA2] Adicionou distância E{} -> E{}: {:?}", 
+                                             id_linha_atual + 1, id_coluna_destino + 1, valor_f32);
                                 }
                             }
                         }
@@ -109,13 +117,21 @@ impl GrafoMetro {
             }
         }
 
+        // Debug específico para E1->E2 e E2->E1
+        println!("[DEBUG DADOS_METRO] matriz_distancias_reais[0][1] (E1->E2): {:?}", matriz_distancias_reais[0][1]);
+        println!("[DEBUG DADOS_METRO] matriz_distancias_reais[1][0] (E2->E1): {:?}", matriz_distancias_reais[1][0]);
+
         // --- Passo 2: Ler as cores das linhas (Tabela de Linhas) e criar as Conexoes ---
         let arquivo_linhas = File::open(caminho_linhas_conexao)?;
         let mut leitor_linhas = ReaderBuilder::new().delimiter(b';').has_headers(true).from_reader(arquivo_linhas);
 
+        println!("\n[DEBUG LINHAS] Iniciando leitura da tabela de linhas\n");
+
         for (id_estacao_origem, resultado_linha) in leitor_linhas.records().enumerate() {
             if id_estacao_origem >= NUMERO_ESTACOES { break; }
             let registro_linha = resultado_linha?;
+            
+            println!("[DEBUG LINHAS] Linha {}: {:?}", id_estacao_origem + 1, registro_linha);
 
             for id_estacao_destino in 0..NUMERO_ESTACOES {
                 if id_estacao_origem == id_estacao_destino { continue; } // Não há conexões para si mesmo.
@@ -123,10 +139,18 @@ impl GrafoMetro {
                 let indice_no_csv = id_estacao_destino + 1;
                 if indice_no_csv < registro_linha.len() {
                     if let Some(cor_linha_str) = registro_linha.get(indice_no_csv) {
+                        println!("[DEBUG LINHAS] E{} -> E{}: '{}'", 
+                                 id_estacao_origem + 1, id_estacao_destino + 1, cor_linha_str);
+                        
                         if !cor_linha_str.trim().is_empty() {
                             if let Ok(cor_linha_int) = cor_linha_str.trim().parse::<u8>() {
+                                println!("[DEBUG LINHAS] Cor da linha: {}", cor_linha_int);
+                                
                                 if cor_linha_int > 0 { // Se o valor é > 0, existe uma linha.
                                     let cor_da_linha = CorLinha::de_inteiro(cor_linha_int);
+                                    
+                                    println!("[DEBUG LINHAS] Converteu para enum: {:?}", cor_da_linha);
+                                    
                                     if cor_da_linha == CorLinha::Nenhuma {
                                         eprintln!("Aviso: Cor de linha inválida ({}) entre E{} e E{}",
                                             cor_linha_int, id_estacao_origem + 1, id_estacao_destino + 1);
@@ -134,9 +158,17 @@ impl GrafoMetro {
                                     }
 
                                     // Verifica se existe uma distância real correspondente para esta conexão.
+                                    println!("[DEBUG LINHAS] Buscando distância real E{} -> E{}: {:?}", 
+                                             id_estacao_origem + 1, id_estacao_destino + 1,
+                                             matriz_distancias_reais[id_estacao_origem][id_estacao_destino]);
+                                    
                                     if let Some(distancia_real_km) = matriz_distancias_reais[id_estacao_origem][id_estacao_destino] {
                                         let tempo_viagem_minutos = (distancia_real_km / VELOCIDADE_TREM_KMH) * 60.0;
 
+                                        println!("[DEBUG LINHAS] ADICIONANDO CONEXÃO: E{} -> E{} (Cor {:?}, Dist: {}, Tempo: {})",
+                                                id_estacao_origem + 1, id_estacao_destino + 1, 
+                                                cor_da_linha, distancia_real_km, tempo_viagem_minutos);
+                                        
                                         self.lista_adjacencia[id_estacao_origem].push(Conexao {
                                             para_estacao: id_estacao_destino,
                                             cor_linha: cor_da_linha,
@@ -144,14 +176,8 @@ impl GrafoMetro {
                                             tempo_minutos: tempo_viagem_minutos,
                                         });
                                     } else {
-                                        // Este caso indica uma possível inconsistência nos dados:
-                                        // há uma linha definida na "Tabela de Linhas", mas não há
-                                        // uma distância correspondente na "Tabela 2".
-                                        // Por ora, apenas imprimimos um aviso. Você pode decidir como tratar isso.
-                                        // eprintln!(
-                                        //     "Aviso: Linha (cor {}) definida entre E{} e E{}, mas sem distância real na Tabela 2.",
-                                        //     cor_linha_int, id_estacao_origem + 1, id_estacao_destino + 1
-                                        // );
+                                        println!("[DEBUG LINHAS] FALHOU: Sem distância real para E{} -> E{}", 
+                                                 id_estacao_origem + 1, id_estacao_destino + 1);
                                     }
                                 }
                             }
@@ -160,6 +186,14 @@ impl GrafoMetro {
                 }
             }
         }
-        Ok(()) // Retorna Ok se tudo correu bem.
+        
+        // Debug para todas as conexões de E1
+        println!("\n[DEBUG DADOS_METRO] Todas conexões para E1 (ID 0):");
+        for (i, conexao) in self.lista_adjacencia[0].iter().enumerate() {
+            println!("  Conexão {}: {:?}", i+1, conexao);
+        }
+        
+        println!("[DEBUG DADOS_METRO] Conexões carregadas para E1 (ID 0): {:?}", self.lista_adjacencia[0]);
+        Ok(())
     }
 }
