@@ -1,0 +1,10 @@
+/home/sojnaw/Documentos/Dev/rust-paris-transit-a-star/metro_paris_astar/target/debug/deps/libwayland_protocols-271c86bb2666be7b.rmeta: /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/lib.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/protocol_macro.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/ext.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/wp.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/xdg.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/xwayland.rs
+
+/home/sojnaw/Documentos/Dev/rust-paris-transit-a-star/metro_paris_astar/target/debug/deps/wayland_protocols-271c86bb2666be7b.d: /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/lib.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/protocol_macro.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/ext.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/wp.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/xdg.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/xwayland.rs
+
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/lib.rs:
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/protocol_macro.rs:
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/ext.rs:
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/wp.rs:
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/xdg.rs:
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-protocols-0.32.8/src/xwayland.rs:

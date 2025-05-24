@@ -1,0 +1,10 @@
+/home/sojnaw/Documentos/Dev/rust-paris-transit-a-star/metro_paris_astar/target/debug/deps/libaccesskit_consumer-6d75c359fd12928a.rmeta: /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/lib.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/tree.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/node.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/filters.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/iterators.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/text.rs
+
+/home/sojnaw/Documentos/Dev/rust-paris-transit-a-star/metro_paris_astar/target/debug/deps/accesskit_consumer-6d75c359fd12928a.d: /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/lib.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/tree.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/node.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/filters.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/iterators.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/text.rs
+
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/lib.rs:
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/tree.rs:
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/node.rs:
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/filters.rs:
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/iterators.rs:
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_consumer-0.26.0/src/text.rs:

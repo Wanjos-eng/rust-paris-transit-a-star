@@ -1,0 +1,8 @@
+/home/sojnaw/Documentos/Dev/rust-paris-transit-a-star/metro_paris_astar/target/debug/deps/libsmithay_clipboard-52723a3251fe8d06.rmeta: /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.2/src/lib.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.2/src/mime.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.2/src/state.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.2/src/worker.rs
+
+/home/sojnaw/Documentos/Dev/rust-paris-transit-a-star/metro_paris_astar/target/debug/deps/smithay_clipboard-52723a3251fe8d06.d: /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.2/src/lib.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.2/src/mime.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.2/src/state.rs /home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.2/src/worker.rs
+
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.2/src/lib.rs:
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.2/src/mime.rs:
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.2/src/state.rs:
+/home/sojnaw/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.2/src/worker.rs:
