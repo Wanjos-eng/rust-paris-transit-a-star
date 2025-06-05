@@ -10,12 +10,16 @@ use std::sync::Arc; // Para usar Arc com o grafo
 
 fn main() {
     println!("--- Iniciando Teste de Carregamento do Grafo do Metrô ---");
+
+    // Cria uma nova instância (mutável) do GrafoMetro.
     let mut grafo = GrafoMetro::novo();
 
+    // Carrega as distâncias heurísticas.
     if let Err(e) = grafo.carregar_distancias_heuristicas("data/tabela1_distancias_diretas.csv") {
         eprintln!("ERRO CRÍTICO ao carregar 'tabela1_distancias_diretas.csv': {}", e);
         panic!();
     }
+    // Carrega as conexões reais e as linhas.
     if let Err(e) = grafo.carregar_conexoes(
         "data/tabela2_distancias_reais.csv",
         "data/tabela_linhas_conexao.csv",
@@ -23,54 +27,90 @@ fn main() {
         eprintln!("ERRO CRÍTICO ao carregar conexões: {}", e);
         panic!();
     }
-    println!("Dados do grafo carregados com sucesso.\n");
+    println!("Dados do grafo carregados com sucesso.");
+
+    // --- DEBUG RÁPIDO: Imprime algumas conexões carregadas ---
+    // Descomente para verificar se as conexões estão sendo carregadas como esperado.
+    /*
+    for id_estacao_origem in 0..grafo_metro::NUMERO_ESTACOES {
+        if !grafo.lista_adjacencia[id_estacao_origem].is_empty() {
+            println!("Conexões de {}:", grafo.estacoes[id_estacao_origem].nome);
+            for conexao in &grafo.lista_adjacencia[id_estacao_origem] {
+                println!(
+                    "  -> Para {} (Linha: {:?}, Tempo: {:.1} min)",
+                    grafo.estacoes[conexao.para_estacao].nome,
+                    conexao.cor_linha,
+                    conexao.tempo_minutos
+                );
+            }
+        }
+    }
+    */
+    println!("\n--- Teste de Carregamento Concluído ---\n");
+
 
     // --- Testando o Solucionador A* ---
     println!("--- Iniciando Teste do Algoritmo A* ---");
 
-    // Compartilha o grafo com Arc para que possa ser usado por múltiplas partes de forma segura
+    // Compartilha o grafo com Arc para que possa ser usado de forma segura
     let grafo_compartilhado = Arc::new(grafo);
 
-    // Caso de teste: E6 (ID 5) linha Azul -> E13 (ID 12)
-    // No nosso modelo, a "linha azul" para E6 ao iniciar pode ser representada por uma das
-    // linhas de conexão que E6 possui, ou None se não quisermos forçar uma linha inicial.
-    // Vamos supor que E6 (ID 5) se conecta a E5 (ID 4) pela linha Azul (CorLinha::Azul)
-    // e essa é a "linha de entrada" em E6.
-    // A Tabela de Linhas mostra E6-E5 (ou E5-E6) na linha 1 (Azul).
-    // A linha de chegada na estação inicial pode ser None se ela não veio de uma conexão anterior.
+    // Caso de teste: E6 (ID 5) -> E13 (ID 12)
     let id_inicio = 5; // E6
     let id_objetivo = 12; // E13
 
-    // Para o caso "estação 6 linha azula", precisamos saber QUAL linha azul.
-    // Se E6 está na linha azul porque se conecta a E5 (ID 4) via linha Azul,
-    // e o usuário "entra" em E6 por essa linha, então `linha_inicial_opcional`
-    // poderia ser `Some(grafo_metro::CorLinha::Azul)`.
-    // Por simplicidade, vamos iniciar sem uma linha de chegada específica na estação de início.
-    // O algoritmo considerará a primeira linha tomada a partir do nó inicial.
+    // A linha inicial pode ser None, significando que o A* considera a primeira
+    // linha tomada a partir da estação de início para calcular a primeira possível baldeação.
+    let linha_de_partida_opcional = None; // Exemplo: grafo_metro::CorLinha::Azul se soubéssemos
+
     let mut solucionador = SolucionadorAEstrela::novo(
-        Arc::clone(&grafo_compartilhado), // Clona o Arc, não o grafo em si
+        Arc::clone(&grafo_compartilhado),
         id_inicio,
-        None, // Começamos na estação E6, sem uma "linha de chegada" anterior.
-              // A primeira baldeação (se houver) será ao sair de E6 para a primeira conexão.
+        linha_de_partida_opcional, 
         id_objetivo,
     );
 
     println!(
-        "Iniciando busca de {} para {}", // Correção
+        "Iniciando busca de {} para {}", // Corrigido para não duplicar "E"
         grafo_compartilhado.estacoes[id_inicio].nome,
         grafo_compartilhado.estacoes[id_objetivo].nome
     );
 
-    // Executa alguns passos do A*
-    for i in 0..50 { // Limita o número de passos para teste
+    // Executa os passos do A*
+    for i in 0..100 { // Limite de passos para evitar loop infinito em caso de erro
         match solucionador.proximo_passo() {
             ResultadoPassoAEstrela::EmProgresso => {
-                println!("[Passo {}] A* em progresso...", i + 1);
+                // Comente esta linha para uma saída mais limpa quando o caminho for longo
+                // println!("[Passo {}] A* em progresso...", i + 1);
             }
             ResultadoPassoAEstrela::CaminhoEncontrado(info_caminho) => {
                 println!("\n!!! CAMINHO ENCONTRADO !!!");
                 println!("   Tempo total: {:.2} minutos", info_caminho.tempo_total_minutos);
-                // TODO: Imprimir o caminho detalhado quando a reconstrução estiver pronta
+                println!("   Número de Baldeações: {}", info_caminho.baldeacoes);
+                println!("   Trajeto (Estação [Linha de Chegada nela]):");
+
+                for (indice_no_trajeto, (id_estacao_no_trajeto, linha_chegada_opcional)) in info_caminho.estacoes_do_caminho.iter().enumerate() {
+                    let nome_estacao = &grafo_compartilhado.estacoes[*id_estacao_no_trajeto].nome;
+                    let info_linha = match linha_chegada_opcional {
+                        Some(cor) => format!("{:?}", cor),
+                        None => "N/A (Início)".to_string(),
+                    };
+
+                    if indice_no_trajeto == 0 {
+                         println!("     {}. Partida: {} [{}]",
+                            indice_no_trajeto + 1,
+                            nome_estacao,
+                            info_linha // Linha pela qual "entramos" na primeira estação (geralmente None)
+                        );
+                    } else {
+                        // A linha_chegada_opcional aqui é a linha do TRECHO que chegou nesta estação
+                        println!("     {}. Para: {} [Chegou pela Linha: {}]",
+                            indice_no_trajeto + 1,
+                            nome_estacao,
+                            info_linha
+                        );
+                    }
+                }
                 break; // Sai do loop
             }
             ResultadoPassoAEstrela::NenhumCaminhoPossivel => {
@@ -82,10 +122,9 @@ fn main() {
                 break; // Sai do loop
             }
         }
-        // Para não sobrecarregar o terminal com a fronteira em cada passo:
-        // if let Some(topo_fronteira) = solucionador.fronteira.peek() {
-        //     println!("    Topo da fronteira: E{} (f={:.2})", topo_fronteira.0.id_estacao + 1, topo_fronteira.0.custo_f);
-        // }
+        if i == 99 { // Limite de passos de segurança
+            println!("Atingido limite de 100 passos sem encontrar o objetivo.");
+        }
     }
     println!("\n--- Teste A* Concluído ---");
 }
