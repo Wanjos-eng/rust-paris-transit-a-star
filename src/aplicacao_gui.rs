@@ -45,7 +45,6 @@ pub struct MinhaAplicacaoGUI {
     detalhes_analise_ui: Vec<String>, // Novo campo para mostrar detalhes da análise
     vizinhos_sendo_analisados: HashSet<IdEstacao>, // Novo campo para vizinhos sendo analisados
     zoom_nivel: f32,
-    mostrar_custos_detalhados: bool,
     mostrar_linha_atual: bool,
     mostrar_tempos_conexao: bool, // Nova opção para controlar a visibilidade dos tempos
     offset_rolagem: Vec2,
@@ -55,6 +54,8 @@ pub struct MinhaAplicacaoGUI {
     estacoes_com_popup_automatico: HashSet<IdEstacao>,
     offset_arrasto_popup_atual: Option<Vec2>,
     estacao_sendo_arrastada: Option<IdEstacao>,
+    // Controle de atualização para reduzir piscamento
+    ultimo_tempo_animacao: f32,
 
 }
 
@@ -105,7 +106,6 @@ impl MinhaAplicacaoGUI {
             detalhes_analise_ui: Vec::new(), // Inicializamos vazio
             vizinhos_sendo_analisados: HashSet::new(), // Inicializamos vazio
             zoom_nivel: 0.70, // Zoom inicial mais afastado para melhor visualização
-            mostrar_custos_detalhados: true,
             mostrar_linha_atual: true,
             mostrar_tempos_conexao: true, // Iniciar com os tempos visíveis
             offset_rolagem: Vec2::new(0.0, 0.0), // Inicializa centralizado
@@ -115,6 +115,7 @@ impl MinhaAplicacaoGUI {
             estacoes_com_popup_automatico: HashSet::new(),
             offset_arrasto_popup_atual: None,
             estacao_sendo_arrastada: None,
+            ultimo_tempo_animacao: 0.0,
         }
         // Removido código duplicado do Self retornado
     }
@@ -189,11 +190,8 @@ impl MinhaAplicacaoGUI {
                         }
                         
                         self.mensagem_status_ui = format!(
-                            "Expandindo estação: {} (f={:.1}, g={:.1}, h={:.1})",
-                            no_fronteira.id_estacao + 1, // +1 para exibir baseado em 1 para o usuário
-                            no_fronteira.custo_f,
-                            no_fronteira.custo_g_viagem,
-                            no_fronteira.custo_f - no_fronteira.custo_g_viagem
+                            "Analisando estação: {}",
+                            no_fronteira.id_estacao + 1 // +1 para exibir baseado em 1 para o usuário
                         );
                     } else {
                         self.mensagem_status_ui = "Fronteira vazia, não há solução.".to_string();
@@ -221,6 +219,9 @@ impl MinhaAplicacaoGUI {
                 },
                 crate::algoritmo_a_estrela::ResultadoPassoAEstrela::Erro(msg) => {
                     self.mensagem_status_ui = format!("Erro: {}", msg);
+                    // Limpar vizinhos sendo analisados quando há erro
+                    self.vizinhos_sendo_analisados.clear();
+                    self.no_expandido_atualmente_ui = None;
                     self.solucionador_a_estrela = None;
                 }
             }
@@ -685,6 +686,212 @@ impl MinhaAplicacaoGUI {
         }
     }
 
+    fn mostrar_popup_vizinho_hover(&self, ui: &mut egui::Ui, pos_estacao: egui::Pos2, id_estacao: IdEstacao, grafo: &GrafoMetro) {
+        // Encontrar informações do vizinho na análise atual
+        if let Some(ref solucionador) = self.solucionador_a_estrela {
+            if let Some(ref analise) = solucionador.ultima_analise {
+                if let Some(vizinho_info) = analise.vizinhos_analisados.iter()
+                    .find(|v| v.starts_with(&format!("E{}", id_estacao + 1))) {
+                    
+                    // Extrair informações detalhadas do vizinho
+                    let estacao = &grafo.estacoes[id_estacao];
+                    let estacao_nome = &estacao.nome;
+                    
+                    // Parsear os valores f, g, h da string de informação
+                    let (valor_f, valor_g, valor_h) = self.extrair_valores_fgh(vizinho_info);
+                    
+                    // Posição do pop-up ajustada para não sobrepor a estação
+                    let pos_popup = pos_estacao + egui::Vec2::new(25.0 * self.zoom_nivel, -80.0 * self.zoom_nivel);
+                    
+                    // Use um ID estável para evitar recrear o popup constantemente
+                    let popup_id = egui::Id::new(format!("stable_hover_popup_{}", id_estacao));
+                    
+                    egui::Area::new(popup_id)
+                        .fixed_pos(pos_popup)
+                        .order(egui::Order::Foreground)
+                        .constrain(false)
+                        .show(ui.ctx(), |ui| {
+                            egui::Frame::popup(ui.style())
+                                .fill(egui::Color32::from_rgba_premultiplied(35, 35, 35, 245))
+                                .stroke(egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 165, 0)))
+                                .corner_radius(8.0)
+                                .inner_margin(egui::Margin::same(12))
+                                .show(ui, |ui| {
+                                    ui.set_max_width(320.0);
+                                    
+                                    // Cabeçalho do pop-up
+                                    ui.horizontal(|ui| {
+                                        ui.label(egui::RichText::new("🔍")
+                                            .size(16.0)
+                                            .color(egui::Color32::from_rgb(255, 165, 0)));
+                                        ui.label(egui::RichText::new("Análise do Vizinho A*")
+                                            .size(14.0)
+                                            .color(egui::Color32::from_rgb(255, 165, 0))
+                                            .strong());
+                                    });
+                                    
+                                    ui.separator();
+                                    
+                                    // Nome completo da estação
+                                    ui.label(egui::RichText::new(format!("📍 Estação: {}", estacao_nome))
+                                        .size(13.0)
+                                        .color(egui::Color32::WHITE)
+                                        .strong());
+                                    
+                                    ui.label(egui::RichText::new(format!("🆔 ID: E{}", id_estacao + 1))
+                                        .size(11.0)
+                                        .color(egui::Color32::from_rgb(200, 200, 200)));
+                                    
+                                    ui.add_space(8.0);
+                                    
+                                    // Valores do algoritmo A* com explicações
+                                    ui.label(egui::RichText::new("📊 Valores do Algoritmo A*:")
+                                        .size(12.0)
+                                        .color(egui::Color32::from_rgb(150, 200, 255))
+                                        .strong());
+                                    
+                                    // Exibir valores em um formato mais claro
+                                    ui.group(|ui| {
+                                        if let Some(f) = valor_f {
+                                            ui.horizontal(|ui| {
+                                                ui.label(egui::RichText::new("f =")
+                                                    .size(11.0)
+                                                    .color(egui::Color32::from_rgb(255, 220, 150))
+                                                    .strong());
+                                                ui.label(egui::RichText::new(format!("{:.1}", f))
+                                                    .size(11.0)
+                                                    .color(egui::Color32::WHITE));
+                                                ui.label(egui::RichText::new("(custo total estimado)")
+                                                    .size(9.0)
+                                                    .color(egui::Color32::from_rgb(180, 180, 180))
+                                                    .italics());
+                                            });
+                                        }
+                                        
+                                        if let Some(g) = valor_g {
+                                            ui.horizontal(|ui| {
+                                                ui.label(egui::RichText::new("g =")
+                                                    .size(11.0)
+                                                    .color(egui::Color32::from_rgb(150, 255, 150))
+                                                    .strong());
+                                                ui.label(egui::RichText::new(format!("{:.1}", g))
+                                                    .size(11.0)
+                                                    .color(egui::Color32::WHITE));
+                                                ui.label(egui::RichText::new("(custo real do início)")
+                                                    .size(9.0)
+                                                    .color(egui::Color32::from_rgb(180, 180, 180))
+                                                    .italics());
+                                            });
+                                        }
+                                        
+                                        if let Some(h) = valor_h {
+                                            ui.horizontal(|ui| {
+                                                ui.label(egui::RichText::new("h =")
+                                                    .size(11.0)
+                                                    .color(egui::Color32::from_rgb(255, 150, 150))
+                                                    .strong());
+                                                ui.label(egui::RichText::new(format!("{:.1}", h))
+                                                    .size(11.0)
+                                                    .color(egui::Color32::WHITE));
+                                                ui.label(egui::RichText::new("(heurística até o destino)")
+                                                    .size(9.0)
+                                                    .color(egui::Color32::from_rgb(180, 180, 180))
+                                                    .italics());
+                                            });
+                                        }
+                                    });
+                                    
+                                    ui.add_space(6.0);
+                                    
+                                    // Informações de conectividade
+                                    if let Some(conexoes) = grafo.lista_adjacencia.get(id_estacao) {
+                                        ui.label(egui::RichText::new("🚇 Conexões Disponíveis:")
+                                            .size(12.0)
+                                            .color(egui::Color32::from_rgb(150, 255, 150))
+                                            .strong());
+                                        
+                                        let mut linhas_conectadas: std::collections::HashSet<CorLinha> = std::collections::HashSet::new();
+                                        for conexao in conexoes {
+                                            linhas_conectadas.insert(conexao.cor_linha);
+                                        }
+                                        
+                                        ui.horizontal_wrapped(|ui| {
+                                            for linha in &linhas_conectadas {
+                                                let (cor_linha, nome_linha) = match linha {
+                                                    CorLinha::Azul => (egui::Color32::from_rgb(0, 120, 255), "Azul"),
+                                                    CorLinha::Amarela => (egui::Color32::from_rgb(255, 215, 0), "Amarela"),
+                                                    CorLinha::Vermelha => (egui::Color32::RED, "Vermelha"),
+                                                    CorLinha::Verde => (egui::Color32::from_rgb(0, 180, 0), "Verde"),
+                                                    _ => (egui::Color32::GRAY, "Outra"),
+                                                };
+                                                
+                                                ui.label(egui::RichText::new(format!("● {}", nome_linha))
+                                                    .size(10.0)
+                                                    .color(cor_linha));
+                                            }
+                                        });
+                                    }
+                                    
+                                    ui.add_space(6.0);
+                                    
+                                    // Explicação do algoritmo A*
+                                    ui.collapsing("ℹ️ Como funciona o A*", |ui| {
+                                        ui.label(egui::RichText::new("• f = g + h (custo total)")
+                                            .size(9.0)
+                                            .color(egui::Color32::from_rgb(200, 200, 200)));
+                                        ui.label(egui::RichText::new("• g = custo real do início até aqui")
+                                            .size(9.0)
+                                            .color(egui::Color32::from_rgb(200, 200, 200)));
+                                        ui.label(egui::RichText::new("• h = estimativa até o destino")
+                                            .size(9.0)
+                                            .color(egui::Color32::from_rgb(200, 200, 200)));
+                                        ui.label(egui::RichText::new("• A* escolhe o menor f primeiro")
+                                            .size(9.0)
+                                            .color(egui::Color32::from_rgb(200, 200, 200)));
+                                    });
+                                    
+                                    ui.add_space(4.0);
+                                    
+                                    // Dica de interação
+                                    ui.separator();
+                                    ui.label(egui::RichText::new("💡 Clique na estação para selecioná-la")
+                                        .size(9.0)
+                                        .color(egui::Color32::from_rgb(150, 150, 150))
+                                        .italics());
+                                });
+                        });
+                }
+            }
+        }
+    }
+    
+    // Função auxiliar para extrair valores f, g, h da string de informação
+    fn extrair_valores_fgh(&self, info: &str) -> (Option<f32>, Option<f32>, Option<f32>) {
+        let mut valor_f = None;
+        let mut valor_g = None;
+        let mut valor_h = None;
+        
+        // Parsear a string para extrair os valores f=X, g=Y, h=Z
+        for parte in info.split(", ") {
+            let parte = parte.trim();
+            if parte.starts_with("f=") {
+                if let Ok(val) = parte[2..].parse::<f32>() {
+                    valor_f = Some(val);
+                }
+            } else if parte.starts_with("g=") {
+                if let Ok(val) = parte[2..].parse::<f32>() {
+                    valor_g = Some(val);
+                }
+            } else if parte.starts_with("h=") {
+                if let Ok(val) = parte[2..].parse::<f32>() {
+                    valor_h = Some(val);
+                }
+            }
+        }
+        
+        (valor_f, valor_g, valor_h)
+    }
+
     fn desenhar_estacoes(&mut self, painter: &egui::Painter, rect_desenho: egui::Rect, grafo: &GrafoMetro, ui: &mut egui::Ui) {
         // Desenha os círculos das estações, nomes, destaques de início/fim, e permite interação
         for (i, estacao) in grafo.estacoes.iter().enumerate() {
@@ -709,42 +916,45 @@ impl MinhaAplicacaoGUI {
             
             // Desenhar efeito de animação para estações em análise
             if esta_sendo_expandida {
-                // Efeito de onda pulsante (3 círculos com opacidade decrescente)
-                let tempo = ui.input(|i| i.time);
-                let pulso = (tempo.sin() as f32 * 0.5 + 0.5) * 0.8 + 0.2; // Valor entre 0.2 e 1.0
+                // Controle de atualização mais suave - só atualizar a cada 100ms
+                let tempo = ui.input(|i| i.time) as f32;
+                let delta_tempo = tempo - self.ultimo_tempo_animacao;
                 
-                // Círculo de brilho externo pulsante
+                if delta_tempo > 0.1 { // Atualizar apenas a cada 100ms
+                    self.ultimo_tempo_animacao = tempo;
+                }
+                
+                let pulso = (self.ultimo_tempo_animacao * 2.0).sin() * 0.1 + 0.9; // Pulso muito sutil
+                
+                // Círculo de brilho externo pulsante - mais sutil
                 painter.circle_stroke(
                     pos,
-                    24.0 * self.zoom_nivel * pulso,
-                    Stroke::new(2.0 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 215, 0, (180.0 * (1.0 - pulso * 0.8)) as u8))
+                    22.0 * self.zoom_nivel * pulso,
+                    Stroke::new(1.5 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 215, 0, 100))
                 );
                 
-                // Círculo de brilho médio pulsante
+                // Círculo de brilho médio - estático para reduzir piscamento
                 painter.circle_stroke(
                     pos,
-                    19.0 * self.zoom_nivel * pulso,
-                    Stroke::new(1.5 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 215, 0, (220.0 * (1.0 - pulso * 0.5)) as u8))
+                    19.0 * self.zoom_nivel,
+                    Stroke::new(1.2 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 215, 0, 150))
                 );
             }
             
             // Desenhar efeito visual para vizinhos sendo analisados
             if e_vizinho_sendo_analisado {
-                let tempo = ui.input(|i| i.time);
-                let pulso_vizinho = (tempo * 3.0).sin() as f32 * 0.3 + 0.7; // Pulsação mais sutil
-                
-                // Círculo de destaque para vizinhos sendo analisados (cor laranja)
+                // Efeito estático para evitar piscamento
                 painter.circle_stroke(
                     pos,
-                    22.0 * self.zoom_nivel * pulso_vizinho,
-                    Stroke::new(2.5 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 165, 0, 200)) // Laranja
+                    20.0 * self.zoom_nivel,
+                    Stroke::new(2.0 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 165, 0, 160))
                 );
                 
-                // Círculo interno menor
+                // Círculo interno estático
                 painter.circle_stroke(
                     pos,
                     16.0 * self.zoom_nivel,
-                    Stroke::new(1.5 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 140, 0, 150))
+                    Stroke::new(1.0 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 140, 0, 100))
                 );
             }
             
@@ -807,50 +1017,6 @@ impl MinhaAplicacaoGUI {
                 );
             }
             
-            // Mostrar informações de debug se a estação estiver sendo expandida e a opção estiver ativada
-            if esta_sendo_expandida && self.mostrar_custos_detalhados {
-                if let Some(ref no_atual) = self.no_expandido_atualmente_ui {
-                    // Fundo para o texto de debug
-                    let texto_debug = format!(
-                        "f={:.1}, g={:.1}, h={:.1}",
-                        no_atual.custo_f,
-                        no_atual.custo_g_viagem,
-                        no_atual.custo_f - no_atual.custo_g_viagem
-                    );
-                    
-                    let texto_galley = painter.layout_no_wrap(
-                        texto_debug.clone(),
-                        egui::FontId::proportional(11.0 * self.zoom_nivel),
-                        Color32::WHITE,
-                    );
-                    
-                    let padding = 4.0 * self.zoom_nivel;
-                    let tamanho_balao = texto_galley.size() + Vec2::new(padding * 2.0, padding * 2.0);
-                    
-                    let pos_texto = pos + Vec2::new(0.0, -28.0 * self.zoom_nivel);
-                    let bg_rect = egui::Rect::from_center_size(
-                        pos_texto,
-                        tamanho_balao
-                    );
-                    
-                    // Fundo do balão de informação
-                    painter.rect_filled(
-                        bg_rect,
-                        4.0 * self.zoom_nivel,
-                        Color32::from_rgba_premultiplied(40, 40, 0, 180),
-                    );
-                    
-                    // Texto de debug
-                    painter.text(
-                        pos_texto,
-                        egui::Align2::CENTER_CENTER,
-                        texto_debug,
-                        egui::FontId::proportional(11.0 * self.zoom_nivel),
-                        Color32::YELLOW,
-                    );
-                }
-            }
-            
             // Interação: clique para abrir popup com informações detalhadas
             let area_interacao = egui::Rect::from_center_size(pos, Vec2::splat(32.0 * self.zoom_nivel));
             let response = ui.interact(
@@ -866,15 +1032,17 @@ impl MinhaAplicacaoGUI {
                     17.0 * self.zoom_nivel, 
                     Stroke::new(1.0 * self.zoom_nivel, Color32::WHITE)
                 );
+                
+                // Mostrar pop-up informativo para vizinhos sendo analisados
+                if e_vizinho_sendo_analisado {
+                    self.mostrar_popup_vizinho_hover(ui, pos, i, grafo);
+                }
             }
             
             // Processar clique na estação
             if response.clicked() {
                 // Processar o clique na estação - Selecionar como início/fim
                 self.processar_clique_estacao(i, grafo);
-                
-                // Abrir popup com informações da estação
-                self.abrir_popup_estacao(i, grafo);
             }
         }
     }
@@ -900,23 +1068,25 @@ impl MinhaAplicacaoGUI {
             self.ultima_posicao_mouse = None;
         }
         
-        // Suporte para zoom com a roda do mouse
-        let scroll_delta = ui.input(|i| i.raw_scroll_delta.y);
-        if scroll_delta != 0.0 {
-            // Ajusta o zoom baseado na direção do scroll
-            let fator_zoom = if scroll_delta > 0.0 { 1.1 } else { 0.9 };
-            let novo_zoom = (self.zoom_nivel * fator_zoom).clamp(0.3, 2.5);
-            
-            // Calcula zoom relativo à posição do mouse para um efeito natural
-            if let Some(pos_mouse) = ui.input(|i| i.pointer.interact_pos()) {
-                let pos_antes = (pos_mouse - rect_desenho.min.to_vec2() - self.offset_rolagem) / self.zoom_nivel;
-                self.zoom_nivel = novo_zoom;
-                let pos_depois = (pos_mouse - rect_desenho.min.to_vec2() - self.offset_rolagem) / self.zoom_nivel;
+        // Suporte para zoom com a roda do mouse APENAS se estiver sobre a área de desenho
+        if response.hovered() {
+            let scroll_delta = ui.input(|i| i.raw_scroll_delta.y);
+            if scroll_delta != 0.0 {
+                // Ajusta o zoom baseado na direção do scroll
+                let fator_zoom = if scroll_delta > 0.0 { 1.1 } else { 0.9 };
+                let novo_zoom = (self.zoom_nivel * fator_zoom).clamp(0.3, 2.5);
                 
-                // Ajusta o deslocamento para manter o ponto sob o cursor
-                self.offset_rolagem += (pos_depois - pos_antes) * self.zoom_nivel;
-            } else {
-                self.zoom_nivel = novo_zoom;
+                // Calcula zoom relativo à posição do mouse para um efeito natural
+                if let Some(pos_mouse) = ui.input(|i| i.pointer.interact_pos()) {
+                    let pos_antes = (pos_mouse - rect_desenho.min.to_vec2() - self.offset_rolagem) / self.zoom_nivel;
+                    self.zoom_nivel = novo_zoom;
+                    let pos_depois = (pos_mouse - rect_desenho.min.to_vec2() - self.offset_rolagem) / self.zoom_nivel;
+                    
+                    // Ajusta o deslocamento para manter o ponto sob o cursor
+                    self.offset_rolagem += (pos_depois - pos_antes) * self.zoom_nivel;
+                } else {
+                    self.zoom_nivel = novo_zoom;
+                }
             }
         }
     }
@@ -1167,9 +1337,8 @@ impl eframe::App for MinhaAplicacaoGUI {
                 ui.add(egui::Slider::new(&mut self.zoom_nivel, 0.5..=2.0)
                     .text("Zoom")
                     .step_by(0.1));
-                ui.checkbox(&mut self.mostrar_custos_detalhados, "Mostrar Custos Detalhados");
                 ui.checkbox(&mut self.mostrar_linha_atual, "Mostrar Linha Atual");
-                ui.checkbox(&mut self.mostrar_tempos_conexao, "Mostrar Tempos entre Estações"); // Nova opção
+                ui.checkbox(&mut self.mostrar_tempos_conexao, "Mostrar Tempos entre Estações");
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -1188,7 +1357,10 @@ impl eframe::App for MinhaAplicacaoGUI {
                 let rect_desenho = response.rect;
                 let painter = ui.painter_at(rect_desenho);
 
-                self.processar_eventos_navegacao(ui, &response, rect_desenho);
+                // Só processar eventos de navegação se o mouse estiver sobre a área de desenho
+                if response.hovered() {
+                    self.processar_eventos_navegacao(ui, &response, rect_desenho);
+                }
 
                 painter.rect_filled(rect_desenho, 0.0, Color32::from_gray(30));
 
@@ -1230,39 +1402,15 @@ impl eframe::App for MinhaAplicacaoGUI {
                 
                 // Then do operations with mutable self
                 self.desenhar_estacoes(&painter, rect_desenho, grafo_ref, ui);
-                
-                // Coletando informações para os popups - previne o erro de borrow checker
-                let mut acoes_popup = Vec::new();
-                for (id, popup) in &mut self.popups_info {
-                    if popup.visivel {
-                        let pos = self.posicoes_estacoes_tela[*id] * self.zoom_nivel + self.offset_rolagem + rect_desenho.min.to_vec2();
-                        let popup_id = *id;
-                        let popup_content = popup.conteudo.clone();
-                        let should_close = egui::Area::new(Id::new(format!("popup_{}", id)))
-                            .fixed_pos(pos + Vec2::new(30.0, -30.0))
-                            .show(ui.ctx(), |ui| {
-                                ui.group(|ui| {
-                                    ui.label(&popup_content);
-                                    ui.button("Fechar").clicked()
-                                }).inner
-                            }).inner;
-                        
-                        if should_close {
-                            acoes_popup.push(AcaoPopup { 
-                                id_estacao: popup_id, 
-                                tipo: TipoAcaoPopup::Fechar, 
-                                delta: None 
-                            });
-                        }
-                    }
-                }
-                
-                // Processando ações após o loop
-                self.processar_acoes_popup(acoes_popup);
             });
 
-            if self.solucionador_a_estrela.is_some() {
-                ctx.request_repaint();
+            if self.solucionador_a_estrela.is_some() || !self.vizinhos_sendo_analisados.is_empty() {
+                // Só requisitar repaint se realmente há algo sendo animado
+                // E apenas a cada 100ms para reduzir carga
+                let tempo = ctx.input(|i| i.time) as f32;
+                if tempo - self.ultimo_tempo_animacao > 0.1 {
+                    ctx.request_repaint();
+                }
             }
         });
     }
