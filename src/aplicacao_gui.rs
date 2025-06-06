@@ -55,10 +55,7 @@ pub struct MinhaAplicacaoGUI {
     estacoes_com_popup_automatico: HashSet<IdEstacao>,
     offset_arrasto_popup_atual: Option<Vec2>,
     estacao_sendo_arrastada: Option<IdEstacao>,
-    // Campos para execução automática
-    execucao_automatica: bool,
-    velocidade_execucao: f32, // segundos entre passos
-    ultimo_tempo_passo: f64,
+
 }
 
 impl MinhaAplicacaoGUI {
@@ -118,10 +115,6 @@ impl MinhaAplicacaoGUI {
             estacoes_com_popup_automatico: HashSet::new(),
             offset_arrasto_popup_atual: None,
             estacao_sendo_arrastada: None,
-            // Inicializar campos de execução automática
-            execucao_automatica: false,
-            velocidade_execucao: 1.0, // 1 segundo entre passos por padrão
-            ultimo_tempo_passo: 0.0,
         }
         // Removido código duplicado do Self retornado
     }
@@ -214,10 +207,16 @@ impl MinhaAplicacaoGUI {
                         caminho_info.tempo_total_minutos,
                         caminho_info.baldeacoes
                     );
+                    // Limpar vizinhos sendo analisados quando encontrar o caminho
+                    self.vizinhos_sendo_analisados.clear();
+                    self.no_expandido_atualmente_ui = None;
                     self.solucionador_a_estrela = None;
                 },
                 crate::algoritmo_a_estrela::ResultadoPassoAEstrela::NenhumCaminhoPossivel => {
                     self.mensagem_status_ui = "Não foi possível encontrar um caminho.".to_string();
+                    // Limpar vizinhos sendo analisados quando não há caminho
+                    self.vizinhos_sendo_analisados.clear();
+                    self.no_expandido_atualmente_ui = None;
                     self.solucionador_a_estrela = None;
                 },
                 crate::algoritmo_a_estrela::ResultadoPassoAEstrela::Erro(msg) => {
@@ -686,7 +685,6 @@ impl MinhaAplicacaoGUI {
         }
     }
 
-    // --- Métodos de visualização e interação restaurados ---
     fn desenhar_estacoes(&mut self, painter: &egui::Painter, rect_desenho: egui::Rect, grafo: &GrafoMetro, ui: &mut egui::Ui) {
         // Desenha os círculos das estações, nomes, destaques de início/fim, e permite interação
         for (i, estacao) in grafo.estacoes.iter().enumerate() {
@@ -858,7 +856,7 @@ impl MinhaAplicacaoGUI {
             let response = ui.interact(
                 area_interacao,
                 egui::Id::new(format!("estacao_{}", i)),
-                egui::Sense::click_and_drag(),
+                egui::Sense::click(),
             );
             
             // Se o mouse está sobre a estação, mostrar um realce
@@ -868,11 +866,6 @@ impl MinhaAplicacaoGUI {
                     17.0 * self.zoom_nivel, 
                     Stroke::new(1.0 * self.zoom_nivel, Color32::WHITE)
                 );
-                
-                // Mostrar pop-up informativo para vizinhos sendo analisados
-                if e_vizinho_sendo_analisado {
-                    self.mostrar_popup_vizinho_hover(ui, pos, i, grafo);
-                }
             }
             
             // Processar clique na estação
@@ -884,27 +877,6 @@ impl MinhaAplicacaoGUI {
                 self.abrir_popup_estacao(i, grafo);
             }
         }
-    }
-
-    fn desenhar_popups(&mut self, ui: &mut egui::Ui, rect_desenho: egui::Rect, _grafo: &GrafoMetro) -> Vec<AcaoPopup> {
-        // Exemplo de popup simples para cada estação visível
-        let mut acoes = Vec::new();
-        for (id, popup) in self.popups_info.iter_mut() {
-            if popup.visivel {
-                let pos = self.posicoes_estacoes_tela[*id] * self.zoom_nivel + self.offset_rolagem + rect_desenho.min.to_vec2();
-                let _area = egui::Area::new(Id::new(format!("popup_{}", id)))
-                    .fixed_pos(pos + Vec2::new(30.0, -30.0))
-                    .show(ui.ctx(), |ui| {
-                        ui.group(|ui| {
-                            ui.label(&popup.conteudo);
-                            if ui.button("Fechar").clicked() {
-                                acoes.push(AcaoPopup { id_estacao: *id, tipo: TipoAcaoPopup::Fechar, delta: None });
-                            }
-                        });
-                    });
-            }
-        }
-        acoes
     }
 
     fn centralizar_visualizacao(&mut self, tamanho_disponivel: Vec2) {
@@ -957,126 +929,71 @@ impl MinhaAplicacaoGUI {
                     if let Some(popup) = self.popups_info.get_mut(&acao.id_estacao) {
                         popup.visivel = false;
                     }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    fn verifica_baldeacao_em_conexao(&self, id_origem: IdEstacao, id_destino: IdEstacao) -> bool {
-        if let Some(caminho_info) = &self.resultado_caminho_ui {
-            for i in 0..caminho_info.estacoes_do_caminho.len().saturating_sub(2) {
-                let (id1, _linha1) = caminho_info.estacoes_do_caminho[i];
-                let (id2, linha2) = caminho_info.estacoes_do_caminho[i+1];
-                let (id3, linha3) = caminho_info.estacoes_do_caminho[i+2];
-                
-                if (id1 == id_origem && id2 == id_destino) || (id2 == id_origem && id3 == id_destino) {
-                    if linha2.is_some() && linha3.is_some() && linha2 != linha3 {
-                        return true;
+                },
+                TipoAcaoPopup::Iniciar => {
+                    // Lógica para iniciar popup
+                },
+                TipoAcaoPopup::MoverDelta => {
+                    if let Some(delta) = acao.delta {
+                        if let Some(popup) = self.popups_info.get_mut(&acao.id_estacao) {
+                            let mut pos = popup.posicao.borrow().clone();
+                            pos += delta;
+                            *popup.posicao.borrow_mut() = pos;
+                        }
+                    }
+                },
+                TipoAcaoPopup::Soltar => {
+                    if let Some(popup) = self.popups_info.get_mut(&acao.id_estacao) {
+                        popup.esta_sendo_arrastado = false;
                     }
                 }
             }
         }
-        false
     }
-    
-    fn gerar_conteudo_popup_estacao(&self, id_estacao: IdEstacao, grafo: &GrafoMetro) -> String {
-        let mut conteudo = String::new();
-        
-        // Nome da estação
-        conteudo.push_str(&format!("Estação: {}\n", grafo.estacoes[id_estacao].nome));
-        conteudo.push_str(&format!("ID: E{}\n\n", id_estacao + 1));
-        
-        // Papel na busca atual
-        if id_estacao == self.id_estacao_inicio_selecionada {
-            conteudo.push_str("Papel: INÍCIO\n");
-        } else if id_estacao == self.id_estacao_objetivo_selecionada {
-            conteudo.push_str("Papel: OBJETIVO\n");
-        } else if let Some(ref info_caminho) = self.resultado_caminho_ui {
-            if info_caminho.estacoes_do_caminho.iter().any(|(id, _)| *id == id_estacao) {
-                conteudo.push_str("Papel: Parte do CAMINHO\n");
-            }
-        }
-        
-        // Informações heurísticas se disponíveis
-        // Acessando o valor diretamente da matriz de distâncias heurísticas
-        if let Some(distancia) = grafo.distancias_heuristicas_km[id_estacao][self.id_estacao_objetivo_selecionada] {
-            conteudo.push_str(&format!("\nDistância estimada ao objetivo: {:.1} min\n", distancia));
-        }
-        
-        // Informações do nó se estiver sendo expandido
-        if let Some(ref no_atual) = self.no_expandido_atualmente_ui {
-            if no_atual.id_estacao == id_estacao {
-                conteudo.push_str("\n--- Expansão atual ---\n");
-                conteudo.push_str(&format!("f(n) = {:.1}\n", no_atual.custo_f));
-                conteudo.push_str(&format!("g(n) = {:.1}\n", no_atual.custo_g_viagem));
-                conteudo.push_str(&format!("h(n) = {:.1}\n", no_atual.custo_f - no_atual.custo_g_viagem));
-                
-                if let Some(linha) = no_atual.linha_chegada {
-                    conteudo.push_str(&format!("Linha atual: {:?}\n", linha));
-                }
-            }
-        }
-        
-        // Conexões disponíveis a partir desta estação
-        conteudo.push_str("\n--- Conexões ---\n");
-        if let Some(conexoes) = grafo.lista_adjacencia.get(id_estacao) {
-            if conexoes.is_empty() {
-                conteudo.push_str("Nenhuma conexão disponível");
-            } else {
-                for conexao in conexoes {
-                    let nome_destino = &grafo.estacoes[conexao.para_estacao].nome;
-                    conteudo.push_str(&format!(
-                        "→ {} ({:.1}min) [linha {:?}]\n", 
-                        nome_destino, 
-                        conexao.tempo_minutos,
-                        conexao.cor_linha
-                    ));
-                }
-            }
-        }
-        
-        conteudo
-    }
-    
+
     fn abrir_popup_estacao(&mut self, id_estacao: IdEstacao, grafo: &GrafoMetro) {
-        // Gerar conteúdo do popup e configurá-lo
+        let estacao = &grafo.estacoes[id_estacao];
+        let conteudo = format!("Estação: {}\nID: E{}", estacao.nome, id_estacao + 1);
+        
         let popup = PopupInfo {
             id_estacao,
-            conteudo: self.gerar_conteudo_popup_estacao(id_estacao, grafo),
+            conteudo,
             posicao: RefCell::new(Vec2::new(30.0, -30.0)),
             visivel: true,
             esta_sendo_arrastado: false,
-            tamanho: Vec2::new(220.0, 180.0),
+            tamanho: Vec2::new(200.0, 100.0),
         };
         
-        // Removemos qualquer popup existente para essa estação
         self.popups_info.insert(id_estacao, popup);
-        self.estacoes_com_popup_automatico.insert(id_estacao);
     }
 
-    // ... Adicione os outros métodos necessários
+    fn desenhar_popups(&mut self, ui: &mut egui::Ui, rect_desenho: egui::Rect, _grafo: &GrafoMetro) -> Vec<AcaoPopup> {
+        // Exemplo de popup simples para cada estação visível
+        let mut acoes = Vec::new();
+        for (id, popup) in self.popups_info.iter_mut() {
+            if popup.visivel {
+                let pos = self.posicoes_estacoes_tela[*id] * self.zoom_nivel + self.offset_rolagem + rect_desenho.min.to_vec2();
+                let _area = egui::Area::new(Id::new(format!("popup_{}", id)))
+                    .fixed_pos(pos + Vec2::new(30.0, -30.0))
+                    .show(ui.ctx(), |ui| {
+                        ui.group(|ui| {
+                            ui.label(&popup.conteudo);
+                            if ui.button("Fechar").clicked() {
+                                acoes.push(AcaoPopup { id_estacao: *id, tipo: TipoAcaoPopup::Fechar, delta: None });
+                            }
+                        });
+                    });
+            }
+        }
+        acoes
+    }
+
+    // ...existing methods...
 }
+
 
 impl eframe::App for MinhaAplicacaoGUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Lógica de execução automática
-        if self.execucao_automatica && self.solucionador_a_estrela.is_some() {
-            let tempo_atual = ctx.input(|i| i.time);
-            if tempo_atual - self.ultimo_tempo_passo >= self.velocidade_execucao as f64 {
-                self.executar_proximo_passo_a_estrela();
-                self.ultimo_tempo_passo = tempo_atual;
-                
-                // Parar execução automática se o algoritmo terminou
-                if self.solucionador_a_estrela.is_none() {
-                    self.execucao_automatica = false;
-                }
-                
-                // Solicitar novo frame para manter a animação
-                ctx.request_repaint();
-            }
-        }
-        
         egui::SidePanel::left("painel_controles")
             .min_width(250.0)
             .show(ctx, |ui| {
@@ -1120,34 +1037,6 @@ impl eframe::App for MinhaAplicacaoGUI {
                         if self.solucionador_a_estrela.is_some() {
                             self.mensagem_status_ui = "Executar Tudo: Limite de passos atingido.".to_string();
                         }
-                    }
-                    
-                    ui.separator();
-                    ui.label("Execução Automática:");
-                    
-                    // Botão Play/Pause
-                    let botao_texto = if self.execucao_automatica { "⏸ Pausar" } else { "▶ Executar" };
-                    if ui.button(botao_texto).clicked() {
-                        self.execucao_automatica = !self.execucao_automatica;
-                        if self.execucao_automatica {
-                            // Inicializar tempo quando começar execução automática
-                            self.ultimo_tempo_passo = ui.ctx().input(|i| i.time);
-                        }
-                    }
-                    
-                    // Controle de velocidade
-                    ui.label("Velocidade (segundos entre passos):");
-                    ui.add(egui::Slider::new(&mut self.velocidade_execucao, 0.1..=3.0)
-                        .step_by(0.1)
-                        .text("s"));
-                    
-                    // Indicador visual do estado
-                    if self.execucao_automatica {
-                        ui.label(egui::RichText::new("🔄 Executando automaticamente...")
-                            .color(egui::Color32::from_rgb(150, 255, 150)));
-                    } else {
-                        ui.label(egui::RichText::new("⏸ Pausado")
-                            .color(egui::Color32::from_rgb(200, 200, 200)));
                     }
                 }
                 ui.separator();
