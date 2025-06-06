@@ -160,30 +160,65 @@ impl MinhaAplicacaoGUI {
                     if let Some(no_fronteira) = solucionador.fronteira.peek() {
                         self.no_expandido_atualmente_ui = Some(no_fronteira.clone());
                         
-                        // Adiciona à nossa lista de nós explorados (para visualização)
-                        // Também adicionamos os nós do solucionador
-                        for id_estacao in &solucionador.explorados {
-                            self.nos_explorados_ui.insert(*id_estacao);
+                        // Limpar estações marcadas como exploradas
+                        self.nos_explorados_ui.clear();
+                        
+                        // Adicionar apenas as estações do caminho atual do nó sendo expandido
+                        // O campo 'caminho' já contém o caminho completo até este nó
+                        for &id_estacao in &no_fronteira.caminho {
+                            self.nos_explorados_ui.insert(id_estacao);
                         }
                         
                         // Capturar os vizinhos sendo analisados se há detalhes da análise
                         self.vizinhos_sendo_analisados.clear();
                         if let Some(ref analise) = solucionador.ultima_analise {
+                            println!("DEBUG: Analisando {} vizinhos:", analise.vizinhos_analisados.len());
+                            
                             // Extrair IDs das estações dos vizinhos analisados
                             for vizinho_info in &analise.vizinhos_analisados {
-                                // O formato é "E{id}: ..." então vamos extrair o ID
-                                if let Some(inicio_numero) = vizinho_info.find('E') {
-                                    if let Some(fim_numero) = vizinho_info.find(':') {
-                                        if fim_numero > inicio_numero + 1 {
-                                            let numero_str = &vizinho_info[inicio_numero + 1..fim_numero];
+                                println!("DEBUG: String original: '{}'", vizinho_info);
+                                
+                                // O formato pode ser:
+                                // "E{id}: g=X, h=Y, f=Z - ADICIONADO"
+                                // "E{id}: já tem caminho melhor"
+                                // "E{id}: já explorado"
+                                // Vamos extrair sempre o ID que aparece depois de "E"
+                                if let Some(inicio_e) = vizinho_info.find('E') {
+                                    if let Some(pos_dois_pontos) = vizinho_info.find(':') {
+                                        if pos_dois_pontos > inicio_e + 1 {
+                                            let numero_str = &vizinho_info[inicio_e + 1..pos_dois_pontos];
+                                            println!("DEBUG: Tentando parsear número: '{}'", numero_str);
+                                            
                                             if let Ok(id_estacao_um_baseado) = numero_str.parse::<usize>() {
-                                                let id_estacao = id_estacao_um_baseado - 1; // Converter para zero-based
-                                                self.vizinhos_sendo_analisados.insert(id_estacao);
+                                                if id_estacao_um_baseado > 0 {
+                                                    let id_estacao = id_estacao_um_baseado - 1; // Converter para zero-based
+                                                    self.vizinhos_sendo_analisados.insert(id_estacao);
+                                                    println!("DEBUG: ✓ Extraído vizinho E{} da string: '{}'", 
+                                                           id_estacao_um_baseado, vizinho_info);
+                                                } else {
+                                                    println!("DEBUG: ✗ ID inválido (zero ou negativo): {}", id_estacao_um_baseado);
+                                                }
+                                            } else {
+                                                println!("DEBUG: ✗ Falha ao parsear número: '{}'", numero_str);
                                             }
+                                        } else {
+                                            println!("DEBUG: ✗ Posição dos dois pontos inválida: inicio_e={}, pos_dois_pontos={}", 
+                                                   inicio_e, pos_dois_pontos);
                                         }
+                                    } else {
+                                        println!("DEBUG: ✗ Não encontrou ':' na string");
                                     }
+                                } else {
+                                    println!("DEBUG: ✗ Não encontrou 'E' na string");
                                 }
                             }
+                            
+                            println!("DEBUG: === RESULTADO FINAL ===");
+                            println!("DEBUG: Total de vizinhos sendo analisados: {}", self.vizinhos_sendo_analisados.len());
+                            for &id in &self.vizinhos_sendo_analisados {
+                                println!("  - E{}", id + 1);
+                            }
+                            println!("DEBUG: ========================");
                             
                             // Atualizar detalhes da análise para exibição
                             self.detalhes_analise_ui = analise.vizinhos_analisados.clone();
@@ -758,10 +793,10 @@ impl MinhaAplicacaoGUI {
                                                     .size(11.0)
                                                     .color(egui::Color32::from_rgb(255, 220, 150))
                                                     .strong());
-                                                ui.label(egui::RichText::new(format!("{:.1}", f))
+                                                ui.label(egui::RichText::new(format!("{:.1} min", f))
                                                     .size(11.0)
                                                     .color(egui::Color32::WHITE));
-                                                ui.label(egui::RichText::new("(custo total estimado)")
+                                                ui.label(egui::RichText::new("(custo total estimado = g + h)")
                                                     .size(9.0)
                                                     .color(egui::Color32::from_rgb(180, 180, 180))
                                                     .italics());
@@ -774,10 +809,10 @@ impl MinhaAplicacaoGUI {
                                                     .size(11.0)
                                                     .color(egui::Color32::from_rgb(150, 255, 150))
                                                     .strong());
-                                                ui.label(egui::RichText::new(format!("{:.1}", g))
+                                                ui.label(egui::RichText::new(format!("{:.1} min", g))
                                                     .size(11.0)
                                                     .color(egui::Color32::WHITE));
-                                                ui.label(egui::RichText::new("(custo real do início)")
+                                                ui.label(egui::RichText::new("(tempo real viajado até aqui)")
                                                     .size(9.0)
                                                     .color(egui::Color32::from_rgb(180, 180, 180))
                                                     .italics());
@@ -790,16 +825,57 @@ impl MinhaAplicacaoGUI {
                                                     .size(11.0)
                                                     .color(egui::Color32::from_rgb(255, 150, 150))
                                                     .strong());
-                                                ui.label(egui::RichText::new(format!("{:.1}", h))
+                                                ui.label(egui::RichText::new(format!("{:.1} min", h))
                                                     .size(11.0)
                                                     .color(egui::Color32::WHITE));
-                                                ui.label(egui::RichText::new("(heurística até o destino)")
+                                                ui.label(egui::RichText::new("(estimativa tempo até destino)")
                                                     .size(9.0)
                                                     .color(egui::Color32::from_rgb(180, 180, 180))
                                                     .italics());
                                             });
                                         }
                                     });
+                                    
+                                    // Mostrar interpretação dos valores se todos estiverem disponíveis
+                                    if valor_f.is_some() && valor_g.is_some() && valor_h.is_some() {
+                                        ui.add_space(6.0);
+                                        ui.label(egui::RichText::new("🧮 Interpretação:")
+                                            .size(12.0)
+                                            .color(egui::Color32::from_rgb(150, 200, 255))
+                                            .strong());
+                                        
+                                        ui.group(|ui| {
+                                            let f_val = valor_f.unwrap();
+                                            let g_val = valor_g.unwrap();
+                                            let h_val = valor_h.unwrap();
+                                            
+                                            ui.label(egui::RichText::new(format!(
+                                                "✓ Confirmação: {:.1} = {:.1} + {:.1}",
+                                                f_val, g_val, h_val
+                                            ))
+                                                .size(10.0)
+                                                .color(egui::Color32::from_rgb(150, 255, 150)));
+                                            
+                                            if g_val > h_val {
+                                                ui.label(egui::RichText::new("📍 Já percorreu mais tempo que o estimado restante")
+                                                    .size(9.0)
+                                                    .color(egui::Color32::from_rgb(255, 200, 100)));
+                                            } else {
+                                                ui.label(egui::RichText::new("🚀 Ainda há um bom trecho pela frente")
+                                                    .size(9.0)
+                                                    .color(egui::Color32::from_rgb(100, 200, 255)));
+                                            }
+                                            
+                                            // Mostrar a porcentagem do progresso
+                                            let progresso = (g_val / f_val * 100.0).min(100.0);
+                                            ui.label(egui::RichText::new(format!(
+                                                "📊 Progresso estimado: {:.0}% do caminho total",
+                                                progresso
+                                            ))
+                                                .size(9.0)
+                                                .color(egui::Color32::from_rgb(200, 200, 200)));
+                                        });
+                                    }
                                     
                                     ui.add_space(6.0);
                                     
@@ -836,18 +912,40 @@ impl MinhaAplicacaoGUI {
                                     
                                     // Explicação do algoritmo A*
                                     ui.collapsing("ℹ️ Como funciona o A*", |ui| {
-                                        ui.label(egui::RichText::new("• f = g + h (custo total)")
+                                        ui.label(egui::RichText::new("📝 Fórmula: f = g + h")
+                                            .size(10.0)
+                                            .color(egui::Color32::from_rgb(255, 220, 150))
+                                            .strong());
+                                        ui.add_space(4.0);
+                                        
+                                        ui.label(egui::RichText::new("🟢 g = Custo real acumulado desde o início")
                                             .size(9.0)
-                                            .color(egui::Color32::from_rgb(200, 200, 200)));
-                                        ui.label(egui::RichText::new("• g = custo real do início até aqui")
+                                            .color(egui::Color32::from_rgb(150, 255, 150)));
+                                        ui.label(egui::RichText::new("   Tempo total viajado até esta estação")
+                                            .size(8.0)
+                                            .color(egui::Color32::from_rgb(180, 180, 180)));
+                                        ui.add_space(2.0);
+                                        
+                                        ui.label(egui::RichText::new("🔴 h = Heurística (estimativa otimista)")
                                             .size(9.0)
-                                            .color(egui::Color32::from_rgb(200, 200, 200)));
-                                        ui.label(egui::RichText::new("• h = estimativa até o destino")
+                                            .color(egui::Color32::from_rgb(255, 150, 150)));
+                                        ui.label(egui::RichText::new("   Estimativa do tempo até o destino")
+                                            .size(8.0)
+                                            .color(egui::Color32::from_rgb(180, 180, 180)));
+                                        ui.add_space(2.0);
+                                        
+                                        ui.label(egui::RichText::new("🟡 f = Prioridade total na busca")
                                             .size(9.0)
-                                            .color(egui::Color32::from_rgb(200, 200, 200)));
-                                        ui.label(egui::RichText::new("• A* escolhe o menor f primeiro")
+                                            .color(egui::Color32::from_rgb(255, 220, 150)));
+                                        ui.label(egui::RichText::new("   O A* sempre expande o nó com menor f")
+                                            .size(8.0)
+                                            .color(egui::Color32::from_rgb(180, 180, 180)));
+                                        ui.add_space(4.0);
+                                        
+                                        ui.label(egui::RichText::new("🎯 Objetivo: Encontrar o caminho mais rápido!")
                                             .size(9.0)
-                                            .color(egui::Color32::from_rgb(200, 200, 200)));
+                                            .color(egui::Color32::from_rgb(150, 200, 255))
+                                            .strong());
                                     });
                                     
                                     ui.add_space(4.0);
@@ -892,6 +990,94 @@ impl MinhaAplicacaoGUI {
         (valor_f, valor_g, valor_h)
     }
 
+    fn desenhar_marcadores_estacoes(&self, painter: &egui::Painter, rect_desenho: egui::Rect, grafo: &GrafoMetro, _ui: &egui::Ui) {
+        // Desenha marcadores visuais acima das estações para indicar seu status
+        for (i, _estacao) in grafo.estacoes.iter().enumerate() {
+            let pos = self.posicoes_estacoes_tela[i] * self.zoom_nivel + self.offset_rolagem + rect_desenho.min.to_vec2();
+            
+            // Posição do marcador (acima da estação)
+            let pos_marcador = pos + Vec2::new(0.0, -35.0 * self.zoom_nivel);
+            
+            // Determinar que tipo de marcador mostrar (prioridade: início/fim > caminho atual > analisando vizinhos)
+            let marcador_info = if i == self.id_estacao_inicio_selecionada {
+                Some(("INÍCIO", Color32::from_rgb(0, 140, 0), Color32::from_rgb(20, 80, 20)))
+            } else if i == self.id_estacao_objetivo_selecionada {
+                Some(("FIM", Color32::from_rgb(220, 50, 50), Color32::from_rgb(80, 20, 20)))
+            } else if self.nos_explorados_ui.contains(&i) {
+                // Estações do caminho atual recebem marcador "CAMINHO"
+                Some(("CAMINHO", Color32::from_rgb(0, 120, 60), Color32::from_rgb(20, 60, 40)))
+            } else if self.vizinhos_sendo_analisados.contains(&i) {
+                // Apenas vizinhos que NÃO estão no caminho atual recebem marcador "ANALISANDO"
+                Some(("ANALISANDO", Color32::from_rgb(255, 140, 0), Color32::from_rgb(120, 60, 0)))
+            } else {
+                None
+            };
+            
+            // Desenhar o marcador se houver
+            if let Some((texto, cor_fundo, cor_borda)) = marcador_info {
+                // Calcular tamanho do texto
+                let fonte = egui::FontId::proportional((9.0 * self.zoom_nivel).max(8.0)); // Tamanho mínimo para legibilidade
+                let tamanho_texto = painter.ctx().fonts(|f| f.layout_no_wrap(texto.to_string(), fonte.clone(), Color32::WHITE));
+                
+                // Desenhar fundo arredondado
+                let padding = Vec2::new(6.0, 3.0) * self.zoom_nivel;
+                let rect_fundo = egui::Rect::from_center_size(
+                    pos_marcador,
+                    tamanho_texto.rect.size() + padding * 2.0
+                );
+                
+                // Sombra
+                painter.rect_filled(
+                    rect_fundo.translate(Vec2::new(1.0, 1.0) * self.zoom_nivel),
+                    3.0 * self.zoom_nivel,
+                    Color32::from_rgba_premultiplied(0, 0, 0, 120)
+                );
+                
+                // Fundo principal
+                painter.rect_filled(
+                    rect_fundo,
+                    3.0 * self.zoom_nivel,
+                    cor_fundo
+                );
+                
+                // Borda
+                painter.rect_stroke(
+                    rect_fundo,
+                    3.0 * self.zoom_nivel,
+                    Stroke::new(1.0 * self.zoom_nivel, cor_borda),
+                    egui::StrokeKind::Middle
+                );
+                
+                // Texto
+                painter.text(
+                    pos_marcador,
+                    egui::Align2::CENTER_CENTER,
+                    texto,
+                    fonte,
+                    Color32::WHITE
+                );
+                
+                // Seta apontando para a estação (mais simples e sutil)
+                let pos_seta_inicio = pos_marcador + Vec2::new(0.0, rect_fundo.height() / 2.0);
+                let pos_seta_fim = pos + Vec2::new(0.0, -22.0 * self.zoom_nivel);
+                
+                // Linha da seta
+                painter.line_segment(
+                    [pos_seta_inicio, pos_seta_fim],
+                    Stroke::new(1.5 * self.zoom_nivel, cor_borda)
+                );
+                
+                // Ponta da seta (triângulo pequeno)
+                let tamanho_ponta = 3.0 * self.zoom_nivel;
+                let ponta1 = pos_seta_fim + Vec2::new(-tamanho_ponta, -tamanho_ponta);
+                let ponta2 = pos_seta_fim + Vec2::new(tamanho_ponta, -tamanho_ponta);
+                
+                painter.line_segment([pos_seta_fim, ponta1], Stroke::new(1.5 * self.zoom_nivel, cor_borda));
+                painter.line_segment([pos_seta_fim, ponta2], Stroke::new(1.5 * self.zoom_nivel, cor_borda));
+            }
+        }
+    }
+
     fn desenhar_estacoes(&mut self, painter: &egui::Painter, rect_desenho: egui::Rect, grafo: &GrafoMetro, ui: &mut egui::Ui) {
         // Desenha os círculos das estações, nomes, destaques de início/fim, e permite interação
         for (i, estacao) in grafo.estacoes.iter().enumerate() {
@@ -904,42 +1090,8 @@ impl MinhaAplicacaoGUI {
                 false
             };
             
-            // Determinar se é a estação atualmente sendo expandida
-            let esta_sendo_expandida = if let Some(ref no_atual) = self.no_expandido_atualmente_ui {
-                no_atual.id_estacao == i
-            } else {
-                false
-            };
-            
             // Determinar se esta estação é um vizinho sendo analisado
             let e_vizinho_sendo_analisado = self.vizinhos_sendo_analisados.contains(&i);
-            
-            // Desenhar efeito de animação para estações em análise
-            if esta_sendo_expandida {
-                // Controle de atualização mais suave - só atualizar a cada 100ms
-                let tempo = ui.input(|i| i.time) as f32;
-                let delta_tempo = tempo - self.ultimo_tempo_animacao;
-                
-                if delta_tempo > 0.1 { // Atualizar apenas a cada 100ms
-                    self.ultimo_tempo_animacao = tempo;
-                }
-                
-                let pulso = (self.ultimo_tempo_animacao * 2.0).sin() * 0.1 + 0.9; // Pulso muito sutil
-                
-                // Círculo de brilho externo pulsante - mais sutil
-                painter.circle_stroke(
-                    pos,
-                    22.0 * self.zoom_nivel * pulso,
-                    Stroke::new(1.5 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 215, 0, 100))
-                );
-                
-                // Círculo de brilho médio - estático para reduzir piscamento
-                painter.circle_stroke(
-                    pos,
-                    19.0 * self.zoom_nivel,
-                    Stroke::new(1.2 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 215, 0, 150))
-                );
-            }
             
             // Desenhar efeito visual para vizinhos sendo analisados
             if e_vizinho_sendo_analisado {
@@ -958,8 +1110,16 @@ impl MinhaAplicacaoGUI {
                 );
             }
             
-            // Cor de preenchimento única para todas as estações - apenas bordas coloridas
-            let cor_preenchimento = Color32::from_rgb(40, 42, 54); // Cor base escura para todas as estações
+            // Cor de preenchimento baseada no status da estação
+            let cor_preenchimento = if i == self.id_estacao_inicio_selecionada {
+                // Estação de início fica verde escuro
+                Color32::from_rgb(0, 60, 0)
+            } else if self.nos_explorados_ui.contains(&i) {
+                // Estações do caminho atual sendo construído ficam com verde mais claro
+                Color32::from_rgb(0, 40, 20) // Verde mais sutil para diferenciação
+            } else {
+                Color32::from_rgb(40, 42, 54) // Cor base escura para estações não visitadas
+            };
             
             // Desenhar círculo de fundo para dar profundidade (sombra)
             painter.circle_filled(
@@ -975,17 +1135,17 @@ impl MinhaAplicacaoGUI {
                 cor_preenchimento
             );
             
-            // Borda com cor apropriada e espessura maior
+            // Borda com cor apropriada e espessura maior - ORDEM CORRIGIDA DE PRIORIDADE
             let (cor_borda, espessura_borda) = if i == self.id_estacao_inicio_selecionada {
-                (Color32::from_rgb(50, 220, 50), 3.0) // Verde para início
+                (Color32::from_rgb(0, 140, 0), 3.0) // Verde mais escuro para início
             } else if i == self.id_estacao_objetivo_selecionada {
                 (Color32::from_rgb(220, 50, 50), 3.0) // Vermelho para objetivo
-            } else if esta_na_solucao {
-                (Color32::from_rgb(0, 150, 136), 3.0) // Verde-azul escuro para estações na solução
-            } else if esta_sendo_expandida {
-                (Color32::from_rgb(255, 215, 0), 3.0) // Amarelo-ouro para estação sendo analisada
             } else if e_vizinho_sendo_analisado {
-                (Color32::from_rgb(255, 140, 0), 2.5) // Laranja para vizinhos sendo analisados
+                (Color32::from_rgb(255, 140, 0), 2.5) // PRIORIDADE ALTA: Laranja para vizinhos sendo analisados
+            } else if self.nos_explorados_ui.contains(&i) {
+                (Color32::from_rgb(0, 180, 100), 2.5) // Verde-água para estações do caminho atual
+            } else if esta_na_solucao {
+                (Color32::from_rgb(0, 150, 136), 3.0) // Verde-azul escuro para estações na solução final
             } else {
                 (Color32::from_rgb(150, 150, 200), 2.0) // Azul claro para as demais
             };
@@ -1402,6 +1562,9 @@ impl eframe::App for MinhaAplicacaoGUI {
                 
                 // Then do operations with mutable self
                 self.desenhar_estacoes(&painter, rect_desenho, grafo_ref, ui);
+                
+                // Desenhar marcadores visuais acima das estações
+                self.desenhar_marcadores_estacoes(&painter, rect_desenho, grafo_ref, ui);
             });
 
             if self.solucionador_a_estrela.is_some() || !self.vizinhos_sendo_analisados.is_empty() {
@@ -1409,6 +1572,7 @@ impl eframe::App for MinhaAplicacaoGUI {
                 // E apenas a cada 100ms para reduzir carga
                 let tempo = ctx.input(|i| i.time) as f32;
                 if tempo - self.ultimo_tempo_animacao > 0.1 {
+                    self.ultimo_tempo_animacao = tempo; // FIX: Atualizar o tempo para evitar repaint constante
                     ctx.request_repaint();
                 }
             }
