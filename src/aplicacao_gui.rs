@@ -41,6 +41,9 @@ pub struct MinhaAplicacaoGUI {
     mensagem_status_ui: String,
     posicoes_estacoes_tela: Vec<Pos2>,
     no_expandido_atualmente_ui: Option<EstadoNoFronteira>,
+    nos_explorados_ui: HashSet<IdEstacao>, // Novo campo para rastrear estações já exploradas
+    detalhes_analise_ui: Vec<String>, // Novo campo para mostrar detalhes da análise
+    vizinhos_sendo_analisados: HashSet<IdEstacao>, // Novo campo para vizinhos sendo analisados
     zoom_nivel: f32,
     mostrar_custos_detalhados: bool,
     mostrar_linha_atual: bool,
@@ -52,6 +55,10 @@ pub struct MinhaAplicacaoGUI {
     estacoes_com_popup_automatico: HashSet<IdEstacao>,
     offset_arrasto_popup_atual: Option<Vec2>,
     estacao_sendo_arrastada: Option<IdEstacao>,
+    // Campos para execução automática
+    execucao_automatica: bool,
+    velocidade_execucao: f32, // segundos entre passos
+    ultimo_tempo_passo: f64,
 }
 
 impl MinhaAplicacaoGUI {
@@ -97,7 +104,10 @@ impl MinhaAplicacaoGUI {
             mensagem_status_ui: "Selecione início/fim e inicie a busca.".to_string(),
             solucionador_a_estrela: None,
             no_expandido_atualmente_ui: None,
-            zoom_nivel: 1.0, // Voltando para 1.0 como padrão para não ampliar demais inicialmente
+            nos_explorados_ui: HashSet::new(), // Inicializamos vazio
+            detalhes_analise_ui: Vec::new(), // Inicializamos vazio
+            vizinhos_sendo_analisados: HashSet::new(), // Inicializamos vazio
+            zoom_nivel: 0.70, // Zoom inicial mais afastado para melhor visualização
             mostrar_custos_detalhados: true,
             mostrar_linha_atual: true,
             mostrar_tempos_conexao: true, // Iniciar com os tempos visíveis
@@ -108,6 +118,10 @@ impl MinhaAplicacaoGUI {
             estacoes_com_popup_automatico: HashSet::new(),
             offset_arrasto_popup_atual: None,
             estacao_sendo_arrastada: None,
+            // Inicializar campos de execução automática
+            execucao_automatica: false,
+            velocidade_execucao: 1.0, // 1 segundo entre passos por padrão
+            ultimo_tempo_passo: 0.0,
         }
         // Removido código duplicado do Self retornado
     }
@@ -122,6 +136,8 @@ impl MinhaAplicacaoGUI {
             // Resetar estado do algoritmo
             self.resultado_caminho_ui = None;
             self.no_expandido_atualmente_ui = None;
+            self.nos_explorados_ui.clear(); // Limpar nós explorados anteriores
+            self.detalhes_analise_ui.clear(); // Limpar detalhes da análise anterior
             
             // Criar o solucionador com os parâmetros atuais da interface
             let solucionador = SolucionadorAEstrela::novo(
@@ -149,6 +165,36 @@ impl MinhaAplicacaoGUI {
                     // Se tem nós na fronteira, mostramos o primeiro (de menor custo)
                     if let Some(no_fronteira) = solucionador.fronteira.peek() {
                         self.no_expandido_atualmente_ui = Some(no_fronteira.clone());
+                        
+                        // Adiciona à nossa lista de nós explorados (para visualização)
+                        // Também adicionamos os nós do solucionador
+                        for id_estacao in &solucionador.explorados {
+                            self.nos_explorados_ui.insert(*id_estacao);
+                        }
+                        
+                        // Capturar os vizinhos sendo analisados se há detalhes da análise
+                        self.vizinhos_sendo_analisados.clear();
+                        if let Some(ref analise) = solucionador.ultima_analise {
+                            // Extrair IDs das estações dos vizinhos analisados
+                            for vizinho_info in &analise.vizinhos_analisados {
+                                // O formato é "E{id}: ..." então vamos extrair o ID
+                                if let Some(inicio_numero) = vizinho_info.find('E') {
+                                    if let Some(fim_numero) = vizinho_info.find(':') {
+                                        if fim_numero > inicio_numero + 1 {
+                                            let numero_str = &vizinho_info[inicio_numero + 1..fim_numero];
+                                            if let Ok(id_estacao_um_baseado) = numero_str.parse::<usize>() {
+                                                let id_estacao = id_estacao_um_baseado - 1; // Converter para zero-based
+                                                self.vizinhos_sendo_analisados.insert(id_estacao);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Atualizar detalhes da análise para exibição
+                            self.detalhes_analise_ui = analise.vizinhos_analisados.clone();
+                        }
+                        
                         self.mensagem_status_ui = format!(
                             "Expandindo estação: {} (f={:.1}, g={:.1}, h={:.1})",
                             no_fronteira.id_estacao + 1, // +1 para exibir baseado em 1 para o usuário
@@ -201,74 +247,122 @@ impl MinhaAplicacaoGUI {
     }
 
     fn desenhar_conexoes(&self, painter: &egui::Painter, rect_desenho: egui::Rect, grafo: &GrafoMetro) {
-        // Desenhar todas as conexões entre estações
+        // Primeiro desenhar as conexões normais (não na solução)
         for (id_origem, conexoes) in grafo.lista_adjacencia.iter().enumerate() {
             for conexao in conexoes {
                 let id_destino = conexao.para_estacao;
+                
+                // Verificar se esta conexão faz parte da solução - só desenhar linhas que NÃO estão na solução
+                let na_solucao = self.esta_na_solucao(id_origem, id_destino, conexao.cor_linha);
+                if na_solucao {
+                    continue; // Pular as conexões que fazem parte do caminho (serão desenhadas depois)
+                }
                 
                 // Obtém posições das estações na tela
                 let pos_origem = self.posicoes_estacoes_tela[id_origem] * self.zoom_nivel + self.offset_rolagem + rect_desenho.min.to_vec2();
                 let pos_destino = self.posicoes_estacoes_tela[id_destino] * self.zoom_nivel + self.offset_rolagem + rect_desenho.min.to_vec2();
                 
-                // Determinar cor e espessura da linha baseada na cor da linha
+                // Determinar cor e espessura da linha baseada na cor da linha (mais suave para linhas que não estão na solução)
+                // Aumentando a espessura de todas as linhas
                 let (cor_linha, espessura) = match conexao.cor_linha {
-                    CorLinha::Azul => (Color32::from_rgb(0, 120, 255), 3.0),
-                    CorLinha::Amarela => (Color32::from_rgb(255, 215, 0), 3.0),
-                    CorLinha::Vermelha => (Color32::RED, 3.0),
-                    CorLinha::Verde => (Color32::from_rgb(0, 180, 0), 3.0),
-                    _ => (Color32::GRAY, 2.0)
+                    CorLinha::Azul => (Color32::from_rgb(0, 120, 255), 3.5),
+                    CorLinha::Amarela => (Color32::from_rgb(255, 215, 0), 3.5),
+                    CorLinha::Vermelha => (Color32::RED, 3.5),
+                    CorLinha::Verde => (Color32::from_rgb(0, 180, 0), 3.5),
+                    _ => (Color32::GRAY, 3.0)
                 };
                 
-                // Destacar se esta conexão faz parte da solução
-                let na_solucao = self.esta_na_solucao(id_origem, id_destino, conexao.cor_linha);
-                let stroke = if na_solucao {
-                    Stroke::new(espessura * 2.0 * self.zoom_nivel, cor_linha)
-                } else {
-                    Stroke::new(espessura * self.zoom_nivel, cor_linha.gamma_multiply(0.5))
-                };
+                // Desenhar linha da conexão com opacidade reduzida
+                painter.line_segment(
+                    [pos_origem, pos_destino], 
+                    Stroke::new(espessura * self.zoom_nivel, cor_linha.gamma_multiply(0.3))
+                );
                 
-                // Desenhar linha da conexão
-                painter.line_segment([pos_origem, pos_destino], stroke);
-                
-                // Se ativado, desenhar tempo da conexão
+                // Se ativado, desenhar tempo da conexão (apenas para conexões não na solução)
                 if self.mostrar_tempos_conexao {
                     let meio = (pos_origem + pos_destino.to_vec2()) / 2.0;
                     let texto_tempo = format!("{:.1}", conexao.tempo_minutos);
-                    let tamanho_texto = egui::FontId::proportional(12.0 * self.zoom_nivel);
+                    let tamanho_texto = egui::FontId::proportional(11.0 * self.zoom_nivel);
                     
                     self.desenhar_balao_tempo(
                         painter,
                         meio,
                         texto_tempo,
                         tamanho_texto,
-                        na_solucao
+                        false
+                    );
+                }
+            }
+        }
+        
+        // Desenhar o caminho da solução com linha destacada (verde-azul escuro)
+        if let Some(ref caminho_info) = self.resultado_caminho_ui {
+            // Cor verde-azul escuro vibrante para o caminho da solução
+            let cor_solucao = Color32::from_rgb(0, 150, 136); // Verde-azul escuro (teal)
+            let espessura_solucao = 6.5 * self.zoom_nivel; // Linha ainda mais grossa
+            
+            // Desenhar cada segmento do caminho
+            for i in 0..caminho_info.estacoes_do_caminho.len().saturating_sub(1) {
+                let (id_origem, _) = caminho_info.estacoes_do_caminho[i];
+                let (id_destino, _) = caminho_info.estacoes_do_caminho[i+1];
+                
+                let pos_origem = self.posicoes_estacoes_tela[id_origem] * self.zoom_nivel + self.offset_rolagem + rect_desenho.min.to_vec2();
+                let pos_destino = self.posicoes_estacoes_tela[id_destino] * self.zoom_nivel + self.offset_rolagem + rect_desenho.min.to_vec2();
+                
+                // Linha principal com brilho
+                painter.line_segment(
+                    [pos_origem, pos_destino], 
+                    Stroke::new(espessura_solucao, cor_solucao)
+                );
+                
+                // Efeito de brilho externo na linha (opcional)
+                painter.line_segment(
+                    [pos_origem, pos_destino], 
+                    Stroke::new(espessura_solucao + 2.0, Color32::from_rgba_premultiplied(0, 100, 80, 40))
+                );
+                
+                // Se ativado, desenhar tempo da conexão em destaque
+                if self.mostrar_tempos_conexao {
+                    // Buscar o tempo dessa conexão
+                    let tempo: f32 = if let Some(conexoes) = grafo.lista_adjacencia.get(id_origem) {
+                        conexoes.iter()
+                               .find(|con| con.para_estacao == id_destino)
+                               .map_or(0.0, |con| con.tempo_minutos)
+                    } else {
+                        0.0
+                    };
+                    
+                    let meio = (pos_origem + pos_destino.to_vec2()) / 2.0;
+                    let texto_tempo = format!("{:.1}", tempo);
+                    let tamanho_texto = egui::FontId::proportional(12.0 * self.zoom_nivel);
+                    
+                    // Desenhar tempo com destaque
+                    self.desenhar_balao_tempo(
+                        painter,
+                        meio,
+                        texto_tempo,
+                        tamanho_texto,
+                        true
                     );
                 }
                 
-                // Se esta conexão tem baldeação na solução, destacar
-                if self.verifica_baldeacao_em_conexao(id_origem, id_destino) {
-                    let meio = (pos_origem + pos_destino.to_vec2()) / 2.0;
-                    let offset_baldeacao = (pos_destino - pos_origem).normalized() * 15.0 * self.zoom_nivel;
-                    let pos_baldeacao = meio + offset_baldeacao;
+                // Desenhar ícones de baldeação onde necessário
+                if i < caminho_info.estacoes_do_caminho.len().saturating_sub(2) {
+                    let (_, linha_atual) = caminho_info.estacoes_do_caminho[i+1];
+                    let (_, proxima_linha) = caminho_info.estacoes_do_caminho[i+2];
                     
-                    // Verificar as cores da baldeação
-                    if let Some(caminho_info) = &self.resultado_caminho_ui {
-                        for i in 0..caminho_info.estacoes_do_caminho.len().saturating_sub(2) {
-                            let (id1, _linha1) = caminho_info.estacoes_do_caminho[i];
-                            let (id2, linha2) = caminho_info.estacoes_do_caminho[i+1];
-                            let (id3, linha3) = caminho_info.estacoes_do_caminho[i+2];
-                            
-                            if (id1 == id_origem && id2 == id_destino) || (id2 == id_origem && id3 == id_destino) {
-                                if linha2.is_some() && linha3.is_some() && linha2 != linha3 {
-                                    self.desenhar_icone_baldeacao(
-                                        painter,
-                                        pos_baldeacao,
-                                        8.0 * self.zoom_nivel,
-                                        Some((linha2.unwrap(), linha3.unwrap()))
-                                    );
-                                }
-                            }
-                        }
+                    if linha_atual.is_some() && proxima_linha.is_some() && linha_atual != proxima_linha {
+                        // Esta é uma baldeação - desenhar na estação intermediária
+                        let pos_baldeacao = self.posicoes_estacoes_tela[id_destino] * self.zoom_nivel + 
+                                            self.offset_rolagem + rect_desenho.min.to_vec2() + 
+                                            Vec2::new(0.0, -25.0 * self.zoom_nivel); // Posicionar ACIMA da estação
+                        
+                        self.desenhar_icone_baldeacao(
+                            painter,
+                            pos_baldeacao,
+                            10.0 * self.zoom_nivel,
+                            Some((linha_atual.unwrap(), proxima_linha.unwrap()))
+                        );
                     }
                 }
             }
@@ -545,13 +639,14 @@ impl MinhaAplicacaoGUI {
             // Cria um balão informativo com o tempo de baldeação
             let texto_galley = painter.layout_no_wrap(
                 texto_tempo.to_string(),
-                egui::FontId::proportional(10.0 * self.zoom_nivel),
+                egui::FontId::proportional(11.0 * self.zoom_nivel),
                 Color32::WHITE,
             );
             
             let padding = 4.0 * self.zoom_nivel;
             let tamanho_balao = texto_galley.size() + Vec2::new(padding * 2.0, padding * 2.0);
-            let pos_balao = posicao + Vec2::new(0.0, tamanho + 8.0 * self.zoom_nivel);
+            // Posicionar ACIMA do ícone de baldeação (não abaixo como estava antes)
+            let pos_balao = posicao + Vec2::new(0.0, -tamanho - 8.0 * self.zoom_nivel);
             
             let bg_rect = egui::Rect::from_center_size(
                 pos_balao,
@@ -611,72 +706,86 @@ impl MinhaAplicacaoGUI {
                 false
             };
             
-            // Efeito de brilho para estações em análise
+            // Determinar se esta estação é um vizinho sendo analisado
+            let e_vizinho_sendo_analisado = self.vizinhos_sendo_analisados.contains(&i);
+            
+            // Desenhar efeito de animação para estações em análise
             if esta_sendo_expandida {
-                // Círculo de brilho externo
-                painter.circle_filled(
+                // Efeito de onda pulsante (3 círculos com opacidade decrescente)
+                let tempo = ui.input(|i| i.time);
+                let pulso = (tempo.sin() as f32 * 0.5 + 0.5) * 0.8 + 0.2; // Valor entre 0.2 e 1.0
+                
+                // Círculo de brilho externo pulsante
+                painter.circle_stroke(
                     pos,
-                    24.0 * self.zoom_nivel,
-                    Color32::from_rgba_premultiplied(255, 255, 100, 40) // Brilho amarelo suave
+                    24.0 * self.zoom_nivel * pulso,
+                    Stroke::new(2.0 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 215, 0, (180.0 * (1.0 - pulso * 0.8)) as u8))
                 );
                 
-                // Círculo de brilho médio
-                painter.circle_filled(
+                // Círculo de brilho médio pulsante
+                painter.circle_stroke(
                     pos,
-                    21.0 * self.zoom_nivel,
-                    Color32::from_rgba_premultiplied(255, 255, 100, 70)
-                );
-                
-                // Círculo de brilho interno
-                painter.circle_filled(
-                    pos,
-                    18.0 * self.zoom_nivel,
-                    Color32::from_rgba_premultiplied(255, 255, 0, 100)
+                    19.0 * self.zoom_nivel * pulso,
+                    Stroke::new(1.5 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 215, 0, (220.0 * (1.0 - pulso * 0.5)) as u8))
                 );
             }
             
-            // Desenhar o círculo principal da estação - cores diferentes para diferentes papéis
-            let cor_preenchimento = if i == self.id_estacao_inicio_selecionada {
-                Color32::from_rgb(0, 150, 0) // Verde para início
-            } else if i == self.id_estacao_objetivo_selecionada {
-                Color32::from_rgb(180, 0, 0) // Vermelho para objetivo
-            } else if esta_na_solucao {
-                Color32::from_rgb(220, 50, 220) // Magenta para estações na solução
-            } else if esta_sendo_expandida {
-                Color32::from_rgb(200, 150, 0) // Amarelo-ouro para estação sendo analisada
-            } else {
-                Color32::from_rgb(60, 60, 100) // Azul escuro para as demais
-            };
+            // Desenhar efeito visual para vizinhos sendo analisados
+            if e_vizinho_sendo_analisado {
+                let tempo = ui.input(|i| i.time);
+                let pulso_vizinho = (tempo * 3.0).sin() as f32 * 0.3 + 0.7; // Pulsação mais sutil
+                
+                // Círculo de destaque para vizinhos sendo analisados (cor laranja)
+                painter.circle_stroke(
+                    pos,
+                    22.0 * self.zoom_nivel * pulso_vizinho,
+                    Stroke::new(2.5 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 165, 0, 200)) // Laranja
+                );
+                
+                // Círculo interno menor
+                painter.circle_stroke(
+                    pos,
+                    16.0 * self.zoom_nivel,
+                    Stroke::new(1.5 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 140, 0, 150))
+                );
+            }
             
-            // Desenhar círculo de fundo para dar profundidade
+            // Cor de preenchimento única para todas as estações - apenas bordas coloridas
+            let cor_preenchimento = Color32::from_rgb(40, 42, 54); // Cor base escura para todas as estações
+            
+            // Desenhar círculo de fundo para dar profundidade (sombra)
             painter.circle_filled(
-                pos + Vec2::new(1.0, 1.0) * self.zoom_nivel,
-                16.0 * self.zoom_nivel,
+                pos + Vec2::new(1.5, 1.5) * self.zoom_nivel,
+                18.0 * self.zoom_nivel,
                 Color32::from_rgba_premultiplied(0, 0, 0, 160) // Sombra
             );
             
-            // Círculo principal
+            // Círculo principal (mesmo para todas as estações)
             painter.circle_filled(
                 pos,
-                16.0 * self.zoom_nivel,
+                18.0 * self.zoom_nivel,
                 cor_preenchimento
             );
             
-            // Borda com cor apropriada
-            let cor_borda = if i == self.id_estacao_inicio_selecionada {
-                Color32::from_rgb(100, 255, 100) // Verde claro para início
+            // Borda com cor apropriada e espessura maior
+            let (cor_borda, espessura_borda) = if i == self.id_estacao_inicio_selecionada {
+                (Color32::from_rgb(50, 220, 50), 3.0) // Verde para início
             } else if i == self.id_estacao_objetivo_selecionada {
-                Color32::from_rgb(255, 100, 100) // Vermelho claro para objetivo
+                (Color32::from_rgb(220, 50, 50), 3.0) // Vermelho para objetivo
             } else if esta_na_solucao {
-                Color32::from_rgb(255, 150, 255) // Rosa claro para solução
+                (Color32::from_rgb(0, 150, 136), 3.0) // Verde-azul escuro para estações na solução
+            } else if esta_sendo_expandida {
+                (Color32::from_rgb(255, 215, 0), 3.0) // Amarelo-ouro para estação sendo analisada
+            } else if e_vizinho_sendo_analisado {
+                (Color32::from_rgb(255, 140, 0), 2.5) // Laranja para vizinhos sendo analisados
             } else {
-                Color32::from_rgb(150, 150, 200) // Azul claro para as demais
+                (Color32::from_rgb(150, 150, 200), 2.0) // Azul claro para as demais
             };
             
             painter.circle_stroke(
                 pos, 
-                16.0 * self.zoom_nivel, 
-                Stroke::new(2.0 * self.zoom_nivel, cor_borda)
+                18.0 * self.zoom_nivel, 
+                Stroke::new(espessura_borda * self.zoom_nivel, cor_borda)
             );
             
             // Adicionar o identificador da estação dentro do círculo (E1, E2, etc.)
@@ -688,18 +797,17 @@ impl MinhaAplicacaoGUI {
                 Color32::WHITE,
             );
             
-            // Adicionar o nome da estação abaixo do círculo
-            painter.text(
-                pos + Vec2::new(0.0, 20.0 * self.zoom_nivel),
-                egui::Align2::CENTER_TOP,
-                &estacao.nome,
-                egui::FontId::proportional(12.0 * self.zoom_nivel),
-                if esta_na_solucao || i == self.id_estacao_inicio_selecionada || i == self.id_estacao_objetivo_selecionada {
+            // Adicionar o nome da estação abaixo do círculo - apenas para estações relevantes
+            // Só mostra nomes das estações que fazem parte da solução ou que são início/fim
+            if esta_na_solucao || i == self.id_estacao_inicio_selecionada || i == self.id_estacao_objetivo_selecionada {
+                painter.text(
+                    pos + Vec2::new(0.0, 20.0 * self.zoom_nivel),
+                    egui::Align2::CENTER_TOP,
+                    &estacao.nome,
+                    egui::FontId::proportional(12.0 * self.zoom_nivel),
                     Color32::WHITE
-                } else {
-                    Color32::LIGHT_GRAY
-                }
-            );
+                );
+            }
             
             // Mostrar informações de debug se a estação estiver sendo expandida e a opção estiver ativada
             if esta_sendo_expandida && self.mostrar_custos_detalhados {
@@ -750,7 +858,7 @@ impl MinhaAplicacaoGUI {
             let response = ui.interact(
                 area_interacao,
                 egui::Id::new(format!("estacao_{}", i)),
-                egui::Sense::click(),
+                egui::Sense::click_and_drag(),
             );
             
             // Se o mouse está sobre a estação, mostrar um realce
@@ -760,6 +868,11 @@ impl MinhaAplicacaoGUI {
                     17.0 * self.zoom_nivel, 
                     Stroke::new(1.0 * self.zoom_nivel, Color32::WHITE)
                 );
+                
+                // Mostrar pop-up informativo para vizinhos sendo analisados
+                if e_vizinho_sendo_analisado {
+                    self.mostrar_popup_vizinho_hover(ui, pos, i, grafo);
+                }
             }
             
             // Processar clique na estação
@@ -801,7 +914,7 @@ impl MinhaAplicacaoGUI {
         self.offset_rolagem = centro - centro_grafo * self.zoom_nivel;
     }
 
-    fn processar_eventos_navegacao(&mut self, ui: &mut egui::Ui, response: &egui::Response, _rect_desenho: egui::Rect) {
+    fn processar_eventos_navegacao(&mut self, ui: &mut egui::Ui, response: &egui::Response, rect_desenho: egui::Rect) {
         // Permite arrastar o mapa com o mouse
         if response.dragged() {
             if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
@@ -813,6 +926,26 @@ impl MinhaAplicacaoGUI {
             }
         } else {
             self.ultima_posicao_mouse = None;
+        }
+        
+        // Suporte para zoom com a roda do mouse
+        let scroll_delta = ui.input(|i| i.raw_scroll_delta.y);
+        if scroll_delta != 0.0 {
+            // Ajusta o zoom baseado na direção do scroll
+            let fator_zoom = if scroll_delta > 0.0 { 1.1 } else { 0.9 };
+            let novo_zoom = (self.zoom_nivel * fator_zoom).clamp(0.3, 2.5);
+            
+            // Calcula zoom relativo à posição do mouse para um efeito natural
+            if let Some(pos_mouse) = ui.input(|i| i.pointer.interact_pos()) {
+                let pos_antes = (pos_mouse - rect_desenho.min.to_vec2() - self.offset_rolagem) / self.zoom_nivel;
+                self.zoom_nivel = novo_zoom;
+                let pos_depois = (pos_mouse - rect_desenho.min.to_vec2() - self.offset_rolagem) / self.zoom_nivel;
+                
+                // Ajusta o deslocamento para manter o ponto sob o cursor
+                self.offset_rolagem += (pos_depois - pos_antes) * self.zoom_nivel;
+            } else {
+                self.zoom_nivel = novo_zoom;
+            }
         }
     }
 
@@ -927,6 +1060,23 @@ impl MinhaAplicacaoGUI {
 
 impl eframe::App for MinhaAplicacaoGUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Lógica de execução automática
+        if self.execucao_automatica && self.solucionador_a_estrela.is_some() {
+            let tempo_atual = ctx.input(|i| i.time);
+            if tempo_atual - self.ultimo_tempo_passo >= self.velocidade_execucao as f64 {
+                self.executar_proximo_passo_a_estrela();
+                self.ultimo_tempo_passo = tempo_atual;
+                
+                // Parar execução automática se o algoritmo terminou
+                if self.solucionador_a_estrela.is_none() {
+                    self.execucao_automatica = false;
+                }
+                
+                // Solicitar novo frame para manter a animação
+                ctx.request_repaint();
+            }
+        }
+        
         egui::SidePanel::left("painel_controles")
             .min_width(250.0)
             .show(ctx, |ui| {
@@ -971,25 +1121,156 @@ impl eframe::App for MinhaAplicacaoGUI {
                             self.mensagem_status_ui = "Executar Tudo: Limite de passos atingido.".to_string();
                         }
                     }
+                    
+                    ui.separator();
+                    ui.label("Execução Automática:");
+                    
+                    // Botão Play/Pause
+                    let botao_texto = if self.execucao_automatica { "⏸ Pausar" } else { "▶ Executar" };
+                    if ui.button(botao_texto).clicked() {
+                        self.execucao_automatica = !self.execucao_automatica;
+                        if self.execucao_automatica {
+                            // Inicializar tempo quando começar execução automática
+                            self.ultimo_tempo_passo = ui.ctx().input(|i| i.time);
+                        }
+                    }
+                    
+                    // Controle de velocidade
+                    ui.label("Velocidade (segundos entre passos):");
+                    ui.add(egui::Slider::new(&mut self.velocidade_execucao, 0.1..=3.0)
+                        .step_by(0.1)
+                        .text("s"));
+                    
+                    // Indicador visual do estado
+                    if self.execucao_automatica {
+                        ui.label(egui::RichText::new("🔄 Executando automaticamente...")
+                            .color(egui::Color32::from_rgb(150, 255, 150)));
+                    } else {
+                        ui.label(egui::RichText::new("⏸ Pausado")
+                            .color(egui::Color32::from_rgb(200, 200, 200)));
+                    }
                 }
                 ui.separator();
                 ui.label(&self.mensagem_status_ui);
                 if let Some(info_caminho) = &self.resultado_caminho_ui {
                     ui.separator();
-                    ui.label("--- Resultado do Caminho ---");
-                    ui.label(format!("Tempo Total: {:.2} min", info_caminho.tempo_total_minutos));
-                    ui.label(format!("Baldeações: {}", info_caminho.baldeacoes));
-                    ui.add_space(5.0);
-                    ui.label("Trajeto:");
+                    ui.heading("📍 Resumo da Rota");
+                    
+                    // Adiciona um quadro com fundo para destacar as informações principais
+                    egui::Frame::group(ui.style())
+                        .fill(egui::Color32::from_rgb(40, 42, 54))  // Mesmo tom escuro usado nas estações
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(80, 80, 100)))
+                        .corner_radius(egui::CornerRadius::same(8))
+                        .inner_margin(egui::Margin::same(8))
+                        .show(ui, |ui| {
+                            // Métricas principais em destaque
+                            ui.horizontal(|ui| {
+                                ui.vertical(|ui| {
+                                    ui.add(egui::Label::new(
+                                        egui::RichText::new(format!("{:.1}", info_caminho.tempo_total_minutos))
+                                            .size(24.0)
+                                            .color(egui::Color32::from_rgb(255, 220, 150))
+                                    ));
+                                    ui.add(egui::Label::new("minutos"));
+                                });
+                                ui.add_space(15.0);
+                                ui.vertical(|ui| {
+                                    ui.add(egui::Label::new(
+                                        egui::RichText::new(info_caminho.baldeacoes.to_string())
+                                            .size(24.0)
+                                            .color(if info_caminho.baldeacoes > 0 {
+                                                egui::Color32::from_rgb(150, 200, 255)
+                                            } else {
+                                                egui::Color32::from_rgb(150, 255, 150)
+                                            })
+                                    ));
+                                    ui.add(egui::Label::new("baldeações"));
+                                });
+                                ui.add_space(15.0);
+                                ui.vertical(|ui| {
+                                    ui.add(egui::Label::new(
+                                        egui::RichText::new(info_caminho.estacoes_do_caminho.len().to_string())
+                                            .size(24.0)
+                                            .color(egui::Color32::from_rgb(200, 200, 200))
+                                    ));
+                                    ui.add(egui::Label::new("estações"));
+                                });
+                            });
+                        });
+                    
+                    ui.add_space(8.0);
+                    ui.label(egui::RichText::new("Trajeto Completo:").strong());
+                    
                     if let Some(grafo) = &self.grafo_metro {
-                        for (idx, (id_est, linha_chegada_op)) in info_caminho.estacoes_do_caminho.iter().enumerate() {
-                            let nome_est = &grafo.estacoes[*id_est].nome;
-                            let info_linha = match linha_chegada_op {
-                                Some(cor) => format!("{:?}", cor),
-                                None => "N/A (Partida)".to_string(),
-                            };
-                            ui.label(format!("  {}. {}: [{}]", idx + 1, nome_est, info_linha));
-                        }
+                        // Frame com scroll para o trajeto
+                        egui::ScrollArea::vertical()
+                            .max_height(200.0)
+                            .show(ui, |ui| {
+                                // Tabela de trajeto
+                                egui::Grid::new("grid_trajeto")
+                                    .num_columns(3)
+                                    .striped(true)
+                                    .spacing([8.0, 4.0])
+                                    .show(ui, |ui| {
+                                        // Cabeçalho da tabela
+                                        ui.add(egui::Label::new(egui::RichText::new("#").strong()));
+                                        ui.add(egui::Label::new(egui::RichText::new("Estação").strong()));
+                                        ui.add(egui::Label::new(egui::RichText::new("Linha").strong()));
+                                        ui.end_row();
+                                        
+                                        // Conteúdo da tabela
+                                        let mut linha_anterior: Option<CorLinha> = None;
+                                        for (idx, (id_est, linha_chegada_op)) in info_caminho.estacoes_do_caminho.iter().enumerate() {
+                                            let nome_est = &grafo.estacoes[*id_est].nome;
+                                            
+                                            // Marca as estações de início e fim com ícones
+                                            let label_idx = if idx == 0 {
+                                                format!("🏁")
+                                            } else if idx == info_caminho.estacoes_do_caminho.len() - 1 {
+                                                format!("🎯")
+                                            } else {
+                                                format!("{}", idx + 1)
+                                            };
+                                            
+                                            ui.label(label_idx);
+                                            
+                                            // Destaca estações com baldeação
+                                            let mut nome_estacao_texto = egui::RichText::new(nome_est);
+                                            if linha_chegada_op.is_some() && linha_anterior.is_some() && 
+                                               *linha_chegada_op != linha_anterior {
+                                                nome_estacao_texto = nome_estacao_texto
+                                                    .strong()
+                                                    .color(egui::Color32::from_rgb(255, 220, 150));
+                                                
+                                                // Adiciona ícone de baldeação
+                                                ui.label(egui::RichText::new(format!("🔄 {}", nome_estacao_texto.text())));
+                                            } else {
+                                                ui.label(nome_estacao_texto);
+                                            }
+                                            
+                                            // Formata o nome da linha com a cor correspondente
+                                            let texto_linha = match linha_chegada_op {
+                                                Some(cor) => {
+                                                    let cor_linha = match cor {
+                                                        CorLinha::Azul => egui::Color32::from_rgb(0, 120, 255),
+                                                        CorLinha::Amarela => egui::Color32::from_rgb(255, 215, 0),
+                                                        CorLinha::Vermelha => egui::Color32::RED,
+                                                        CorLinha::Verde => egui::Color32::from_rgb(0, 180, 0),
+                                                        _ => egui::Color32::GRAY,
+                                                    };
+                                                    egui::RichText::new(format!("{:?}", cor)).color(cor_linha)
+                                                },
+                                                None => egui::RichText::new("Partida").italics(),
+                                            };
+                                            ui.label(texto_linha);
+                                            
+                                            ui.end_row();
+                                            
+                                            // Armazena a linha atual para comparação na próxima iteração
+                                            linha_anterior = *linha_chegada_op;
+                                        }
+                                    });
+                            });
                     }
                 }
                 ui.separator();

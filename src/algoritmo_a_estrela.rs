@@ -76,6 +76,14 @@ pub enum ResultadoPassoAEstrela {
     Erro(String),
 }
 
+// Novo struct para detalhes da análise
+#[derive(Debug, Clone)]
+pub struct DetalhesAnalise {
+    pub estacao_expandida: IdEstacao,
+    pub vizinhos_analisados: Vec<String>,
+    pub fronteira_atual: Vec<String>,
+}
+
 #[derive(Debug)]
 pub struct SolucionadorAEstrela {
     grafo: Arc<GrafoMetro>,
@@ -86,6 +94,7 @@ pub struct SolucionadorAEstrela {
     pub explorados: HashSet<IdEstacao>, 
     custos_g_viagem_mapa: HashMap<IdEstacao, f32>, 
     predecessores_info: HashMap<IdEstacao, (IdEstacao, Option<CorLinha>, CorLinha)>,
+    pub ultima_analise: Option<DetalhesAnalise>, // Novo campo para armazenar detalhes da última análise
 }
 
 impl SolucionadorAEstrela {
@@ -128,6 +137,7 @@ impl SolucionadorAEstrela {
             explorados: HashSet::new(),
             custos_g_viagem_mapa: custos_g_map,
             predecessores_info: HashMap::new(),
+            ultima_analise: None, // Inicializar como None
         }
     }
 
@@ -157,6 +167,10 @@ impl SolucionadorAEstrela {
             
             println!("  Explorando conexões da estação E{}", no_da_fronteira_atual.id_estacao + 1);
             
+            // Criar listas para armazenar detalhes da análise
+            let mut vizinhos_analisados = Vec::new();
+            let mut fronteira_atual = Vec::new();
+            
             // Recuperamos as conexões da estação atual
             if let Some(conexoes) = self.grafo.lista_adjacencia.get(no_da_fronteira_atual.id_estacao) {
                 for conexao in conexoes {
@@ -165,6 +179,7 @@ impl SolucionadorAEstrela {
                     // Não exploramos vizinhos já visitados
                     if self.explorados.contains(&id_vizinho) {
                         println!("    Ignorando E{}: já explorado", id_vizinho + 1);
+                        vizinhos_analisados.push(format!("E{}: já explorado", id_vizinho + 1));
                         continue;
                     }
                     
@@ -261,9 +276,31 @@ impl SolucionadorAEstrela {
                         println!("      Adicionando à fronteira: E{} (f={:.1}, g={:.1}, h={:.1})", 
                                 id_vizinho + 1, custo_f, custo_g_novo, custo_h);
                         self.fronteira.push(novo_no);
+                        
+                        // Adicionar à lista de vizinhos analisados
+                        vizinhos_analisados.push(format!("E{}: g={:.1}, h={:.1}, f={:.1} - ADICIONADO", 
+                                                         id_vizinho + 1, custo_g_novo, custo_h, custo_f));
+                    } else {
+                        vizinhos_analisados.push(format!("E{}: já tem caminho melhor", id_vizinho + 1));
                     }
                 }
             }
+            
+            // Capturar estado atual da fronteira para exibição
+            let mut nodes_fronteira: Vec<_> = self.fronteira.iter().collect();
+            nodes_fronteira.sort_by(|a, b| a.custo_f.partial_cmp(&b.custo_f)
+                .unwrap_or(std::cmp::Ordering::Equal));
+            
+            for node in nodes_fronteira.iter().take(5) {  // Mostrar apenas os 5 melhores
+                fronteira_atual.push(format!("E{}: f={:.1}", node.id_estacao + 1, node.custo_f));
+            }
+            
+            // Armazenar detalhes da análise
+            self.ultima_analise = Some(DetalhesAnalise {
+                estacao_expandida: no_da_fronteira_atual.id_estacao,
+                vizinhos_analisados,
+                fronteira_atual,
+            });
             
             // Depois de processar, mostramos a fronteira atualizada
             self.debug_print_fronteira();
