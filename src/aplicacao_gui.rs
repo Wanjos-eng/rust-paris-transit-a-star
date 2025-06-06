@@ -160,11 +160,9 @@ impl MinhaAplicacaoGUI {
                     if let Some(no_fronteira) = solucionador.fronteira.peek() {
                         self.no_expandido_atualmente_ui = Some(no_fronteira.clone());
                         
-                        // Limpar estações marcadas como exploradas
+                        // Mostrar o caminho parcial atual (do nó que será expandido) 
                         self.nos_explorados_ui.clear();
-                        
-                        // Adicionar apenas as estações do caminho atual do nó sendo expandido
-                        // O campo 'caminho' já contém o caminho completo até este nó
+                        // Adicionar todas as estações do caminho parcial atual
                         for &id_estacao in &no_fronteira.caminho {
                             self.nos_explorados_ui.insert(id_estacao);
                         }
@@ -235,6 +233,13 @@ impl MinhaAplicacaoGUI {
                 },
                 crate::algoritmo_a_estrela::ResultadoPassoAEstrela::CaminhoEncontrado(caminho_info) => {
                     self.resultado_caminho_ui = Some(caminho_info.clone());
+                    
+                    // Poplar nos_explorados_ui com as estações do caminho final
+                    self.nos_explorados_ui.clear();
+                    for (id_estacao, _) in &caminho_info.estacoes_do_caminho {
+                        self.nos_explorados_ui.insert(*id_estacao);
+                    }
+                    
                     self.mensagem_status_ui = format!(
                         "Caminho encontrado! Tempo: {:.1} min, Baldeações: {}",
                         caminho_info.tempo_total_minutos,
@@ -390,7 +395,7 @@ impl MinhaAplicacaoGUI {
                         // Esta é uma baldeação - desenhar na estação intermediária
                         let pos_baldeacao = self.posicoes_estacoes_tela[id_destino] * self.zoom_nivel + 
                                             self.offset_rolagem + rect_desenho.min.to_vec2() + 
-                                            Vec2::new(0.0, -25.0 * self.zoom_nivel); // Posicionar ACIMA da estação
+                                            Vec2::new(0.0, -45.0 * self.zoom_nivel); // Posicionar MAIS ACIMA da estação
                         
                         self.desenhar_icone_baldeacao(
                             painter,
@@ -1003,9 +1008,12 @@ impl MinhaAplicacaoGUI {
                 Some(("INÍCIO", Color32::from_rgb(0, 140, 0), Color32::from_rgb(20, 80, 20)))
             } else if i == self.id_estacao_objetivo_selecionada {
                 Some(("FIM", Color32::from_rgb(220, 50, 50), Color32::from_rgb(80, 20, 20)))
-            } else if self.nos_explorados_ui.contains(&i) {
-                // Estações do caminho atual recebem marcador "CAMINHO"
+            } else if self.nos_explorados_ui.contains(&i) && self.resultado_caminho_ui.is_some() {
+                // Só mostrar "CAMINHO" verde se realmente há uma solução final
                 Some(("CAMINHO", Color32::from_rgb(0, 120, 60), Color32::from_rgb(20, 60, 40)))
+            } else if self.nos_explorados_ui.contains(&i) && self.solucionador_a_estrela.is_some() {
+                // Mostrar "EXPLORANDO" azul para caminho parcial durante a busca
+                Some(("EXPLORANDO", Color32::from_rgb(60, 100, 200), Color32::from_rgb(30, 50, 100)))
             } else if self.vizinhos_sendo_analisados.contains(&i) {
                 // Apenas vizinhos que NÃO estão no caminho atual recebem marcador "ANALISANDO"
                 Some(("ANALISANDO", Color32::from_rgb(255, 140, 0), Color32::from_rgb(120, 60, 0)))
@@ -1114,9 +1122,12 @@ impl MinhaAplicacaoGUI {
             let cor_preenchimento = if i == self.id_estacao_inicio_selecionada {
                 // Estação de início fica verde escuro
                 Color32::from_rgb(0, 60, 0)
-            } else if self.nos_explorados_ui.contains(&i) {
-                // Estações do caminho atual sendo construído ficam com verde mais claro
+            } else if self.nos_explorados_ui.contains(&i) && self.resultado_caminho_ui.is_some() {
+                // Estações do caminho FINAL (só quando há solução) ficam com verde mais claro
                 Color32::from_rgb(0, 40, 20) // Verde mais sutil para diferenciação
+            } else if self.nos_explorados_ui.contains(&i) && self.solucionador_a_estrela.is_some() {
+                // Estações do caminho PARCIAL (durante a busca) ficam com azul escuro
+                Color32::from_rgb(20, 30, 50) // Azul escuro para caminho parcial
             } else {
                 Color32::from_rgb(40, 42, 54) // Cor base escura para estações não visitadas
             };
@@ -1142,8 +1153,10 @@ impl MinhaAplicacaoGUI {
                 (Color32::from_rgb(220, 50, 50), 3.0) // Vermelho para objetivo
             } else if e_vizinho_sendo_analisado {
                 (Color32::from_rgb(255, 140, 0), 2.5) // PRIORIDADE ALTA: Laranja para vizinhos sendo analisados
-            } else if self.nos_explorados_ui.contains(&i) {
-                (Color32::from_rgb(0, 180, 100), 2.5) // Verde-água para estações do caminho atual
+            } else if self.nos_explorados_ui.contains(&i) && self.resultado_caminho_ui.is_some() {
+                (Color32::from_rgb(0, 180, 100), 2.5) // Verde-água apenas para estações do caminho FINAL
+            } else if self.nos_explorados_ui.contains(&i) && self.solucionador_a_estrela.is_some() {
+                (Color32::from_rgb(100, 150, 255), 2.5) // Azul claro para estações do caminho PARCIAL durante busca
             } else if esta_na_solucao {
                 (Color32::from_rgb(0, 150, 136), 3.0) // Verde-azul escuro para estações na solução final
             } else {
@@ -1567,12 +1580,12 @@ impl eframe::App for MinhaAplicacaoGUI {
                 self.desenhar_marcadores_estacoes(&painter, rect_desenho, grafo_ref, ui);
             });
 
-            if self.solucionador_a_estrela.is_some() || !self.vizinhos_sendo_analisados.is_empty() {
-                // Só requisitar repaint se realmente há algo sendo animado
-                // E apenas a cada 100ms para reduzir carga
+            // Controle de repaint mais rigoroso para evitar piscamento
+            let precisa_repaint = self.solucionador_a_estrela.is_some() || !self.vizinhos_sendo_analisados.is_empty();
+            if precisa_repaint {
                 let tempo = ctx.input(|i| i.time) as f32;
-                if tempo - self.ultimo_tempo_animacao > 0.1 {
-                    self.ultimo_tempo_animacao = tempo; // FIX: Atualizar o tempo para evitar repaint constante
+                if tempo - self.ultimo_tempo_animacao > 0.16 { // ~60 FPS máximo
+                    self.ultimo_tempo_animacao = tempo;
                     ctx.request_repaint();
                 }
             }
