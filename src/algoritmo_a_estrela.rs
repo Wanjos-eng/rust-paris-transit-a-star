@@ -14,7 +14,6 @@ pub struct EstadoNoFronteira {
 }
 
 impl EstadoNoFronteira {
-    // Helper method for debugging
     pub fn debug_print(&self) -> String {
         format!("E{} (f={:.1}, g={:.1}, h={:.1})", 
                 self.id_estacao + 1, 
@@ -23,7 +22,6 @@ impl EstadoNoFronteira {
                 self.custo_f - self.custo_g_viagem)
     }
 
-    // Add enhanced debugging information
     pub fn debug_full(&self) -> String {
         let caminho_str = self.caminho.iter()
             .map(|&id| format!("E{}", id+1))
@@ -96,32 +94,43 @@ pub struct SolucionadorAEstrela {
 }
 
 impl SolucionadorAEstrela {
+    // PARTE 1: CONFIGURAÇÃO DA VIAGEM - Inicializa o algoritmo A*
+    // Esta função é como abrir um app de mapas e definir origem/destino
+    // Define origem, destino e prepara estruturas para busca sistemática
     pub fn novo(
         grafo_compartilhado: Arc<GrafoMetro>,
         id_inicio_param: IdEstacao,
         linha_inicial_opcional: Option<CorLinha>,
         id_objetivo_param: IdEstacao,
     ) -> Self {
+        // Cria fronteira: lista ordenada de rotas parciais a serem analisadas
+        // A fronteira sempre mantém as rotas mais promissoras no topo
         let mut fronteira_heap = BinaryHeap::new();
         let mut custos_g_map = HashMap::new();
 
+        // Calcula estimativa inicial (heurística h): tempo estimado até destino
+        // É como calcular "distância em linha reta" convertida para tempo
         let custo_h_inicial = grafo_compartilhado
             .obter_tempo_heuristico_minutos(id_inicio_param, id_objetivo_param)
             .unwrap_or(0.0);
 
+        // Custo real de viagem (g): zero no ponto de partida
         let custo_g_viagem_inicial = 0.0;
+        // Custo total estimado (f): soma do real + estimativa (f = g + h)
         let custo_f_inicial = custo_g_viagem_inicial + custo_h_inicial;
 
-        // Inicializa o caminho com a estação inicial
+        // Inicializa o caminho percorrido com apenas a estação de partida
         let mut caminho_inicial = Vec::new();
         caminho_inicial.push(id_inicio_param);
 
+        // Adiciona ponto de partida na fronteira como primeira rota a ser analisada
+        // Esta é a única opção inicial para começar a busca
         fronteira_heap.push(EstadoNoFronteira {
             id_estacao: id_inicio_param,
             linha_chegada: linha_inicial_opcional,
             custo_f: custo_f_inicial,
             custo_g_viagem: custo_g_viagem_inicial,
-            caminho: caminho_inicial, // Inicializando o caminho
+            caminho: caminho_inicial, // Caminho inicial contém só a origem
         });
         
         custos_g_map.insert(id_inicio_param, custo_g_viagem_inicial);
@@ -139,7 +148,11 @@ impl SolucionadorAEstrela {
         }
     }
 
+    // PARTE 2: BUSCA INTELIGENTE - Núcleo do algoritmo A*
+    // Esta função explora sistematicamente as possibilidades para encontrar a rota mais eficiente
+    // Executa um passo de análise de cada vez, priorizando rotas mais promissoras
     pub fn proximo_passo(&mut self) -> ResultadoPassoAEstrela {
+        // Pega a rota mais promissora da fronteira (menor f-cost = g + h)
         if let Some(no_da_fronteira_atual) = self.fronteira.pop() {
             println!("EXPANDINDO: Estação E{} (f={:.1}, g={:.1}, h={:.1})", 
                      no_da_fronteira_atual.id_estacao + 1,
@@ -147,34 +160,34 @@ impl SolucionadorAEstrela {
                      no_da_fronteira_atual.custo_g_viagem,
                      no_da_fronteira_atual.custo_f - no_da_fronteira_atual.custo_g_viagem);
             
-            // Verificamos se chegamos ao objetivo
+            // CONDIÇÃO DE PARADA: Verificamos se chegamos ao objetivo
             if no_da_fronteira_atual.id_estacao == self.id_objetivo {
-                // Caminho encontrado! Reconstruímos o caminho e retornamos
+                // Caminho encontrado! Chama função de apresentação do resultado
                 let info_caminho = self.criar_info_caminho_do_no(&no_da_fronteira_atual);
                 return ResultadoPassoAEstrela::CaminhoEncontrado(info_caminho);
             }
             
-            // Similar ao exemplo, ignoramos estações já exploradas
+            // Ignora estações já completamente exploradas (conjunto fechado)
             if self.explorados.contains(&no_da_fronteira_atual.id_estacao) {
                 println!("  Estação E{} já explorada, pulando.", no_da_fronteira_atual.id_estacao + 1);
                 return ResultadoPassoAEstrela::EmProgresso;
             }
             
-            // Marcamos como explorada
+            // Marca esta estação como explorada (adiciona ao conjunto fechado)
             self.explorados.insert(no_da_fronteira_atual.id_estacao);
             
             println!("  Explorando conexões da estação E{}", no_da_fronteira_atual.id_estacao + 1);
             
-            // Criar listas para armazenar detalhes da análise
+            // Prepara estruturas para armazenar detalhes da análise
             let mut vizinhos_analisados = Vec::new();
             let mut fronteira_atual = Vec::new();
             
-            // Recuperamos as conexões da estação atual
+            // EXPANSÃO: Analisa todas as estações vizinhas (conexões diretas)
             if let Some(conexoes) = self.grafo.lista_adjacencia.get(no_da_fronteira_atual.id_estacao) {
                 for conexao in conexoes {
                     let id_vizinho = conexao.para_estacao;
                     
-                    // Não exploramos vizinhos já visitados
+                    // Pula vizinhos já completamente explorados
                     if self.explorados.contains(&id_vizinho) {
                         println!("    Ignorando E{}: já explorado", id_vizinho + 1);
                         vizinhos_analisados.push(format!("E{}: já explorado", id_vizinho + 1));
@@ -197,7 +210,7 @@ impl SolucionadorAEstrela {
                     println!("    Analisando E{} via linha {:?} ({} do objetivo)", 
                              id_vizinho + 1, conexao.cor_linha, direcao);
                     
-                    // Calcular custo de baldeação se necessário
+                    // Calcula custos para esta estação vizinha
                     let custo_baldeacao = if let Some(linha_atual) = no_da_fronteira_atual.linha_chegada {
                         if linha_atual != conexao.cor_linha {
                             println!("      Adicionando custo de baldeação: +{}min", TEMPO_BALDEACAO_MINUTOS);
@@ -209,23 +222,23 @@ impl SolucionadorAEstrela {
                         0.0 // Primeira estação não tem baldeação
                     };
                     
-                    // CORREÇÃO: Melhorar a string de debug para deixar claro que g é acumulativo
+                    // Calcula novo custo real acumulado (g) = g_anterior + tempo_conexao + baldeacao
                     let custo_g_novo = no_da_fronteira_atual.custo_g_viagem + conexao.tempo_minutos + custo_baldeacao;
+                    // Obtém estimativa até o destino (h) para este vizinho
                     let mut custo_h = self.grafo.obter_tempo_heuristico_minutos(id_vizinho, self.id_objetivo)
                         .unwrap_or(0.0);
                     
-                    // CORREÇÃO CRÍTICA: Penalidade inteligente baseada na conectividade e contexto
+                    // SISTEMA DE PENALIDADES INTELIGENTES: Desencorajar nós terminais (becos sem saída)
                     if let Some(conexoes_do_vizinho) = self.grafo.lista_adjacencia.get(id_vizinho) {
                         let grau_conectividade = conexoes_do_vizinho.len();
                         
-                        // Aplicar penalidade apenas se não for o destino
+                        // Aplicar penalidade apenas se não for o destino final
                         if id_vizinho != self.id_objetivo {
                             let penalidade = match grau_conectividade {
                                 1 => {
                                     // Nó terminal: penalidade MUITO alta para desencorajar fortemente
-                                    // Usar o máximo entre uma penalidade fixa grande e a heurística multiplicada
-                                    let penalidade_fixa: f32 = 50.0; // Penalidade base alta
-                                    let penalidade_proporcional = custo_h * 2.0; // 200% da heurística
+                                    let penalidade_fixa: f32 = 50.0; 
+                                    let penalidade_proporcional = custo_h * 2.0; 
                                     let penalidade_terminal = penalidade_fixa.max(penalidade_proporcional);
                                     println!("      PENALIDADE TERMINAL ALTA: E{} é um beco sem saída (+{:.1}min)", 
                                            id_vizinho + 1, penalidade_terminal);
@@ -233,14 +246,14 @@ impl SolucionadorAEstrela {
                                 },
                                 2 => {
                                     // Baixa conectividade: penalidade moderada
-                                    let penalidade_baixa = custo_h * 0.3; // 30% da heurística
+                                    let penalidade_baixa = custo_h * 0.3; 
                                     println!("      PENALIDADE BAIXA CONECTIVIDADE: E{} tem apenas 2 conexões (+{:.1}min)", 
                                            id_vizinho + 1, penalidade_baixa);
                                     penalidade_baixa
                                 },
                                 3 => {
                                     // Conectividade média-baixa: penalidade leve
-                                    let penalidade_leve = custo_h * 0.1; // 10% da heurística  
+                                    let penalidade_leve = custo_h * 0.1;
                                     if penalidade_leve > 1.0 {
                                         println!("      PENALIDADE LEVE: E{} tem conectividade média-baixa (+{:.1}min)", 
                                                id_vizinho + 1, penalidade_leve);
@@ -253,6 +266,7 @@ impl SolucionadorAEstrela {
                         }
                     }
                     
+                    // Calcula custo total estimado (f) = g + h
                     let custo_f = custo_g_novo + custo_h;
                     
                     println!("      Custos: g_acumulado_anterior={:.1} + tempo_conexao={:.1} + baldeacao={:.1} = g_total_acumulado={:.1}, h={:.1}, f={:.1}", 
@@ -263,10 +277,10 @@ impl SolucionadorAEstrela {
                              custo_h,                             // Heurística (possivelmente penalizada)
                              custo_f);
                     
-                    // Verificar se já temos um caminho melhor para esta estação na fronteira
+                    // Verificar se já existe um caminho melhor para evitar rotas redundantes
                     let mut ja_tem_melhor_caminho = false;
                     
-                    // CORREÇÃO: Verificação mais rigorosa de caminhos existentes
+                    // Verifica se já há um caminho registrado com custo menor
                     if let Some(&custo_g_registrado) = self.custos_g_viagem_mapa.get(&id_vizinho) {
                         if custo_g_registrado <= custo_g_novo {
                             ja_tem_melhor_caminho = true;
@@ -274,7 +288,7 @@ impl SolucionadorAEstrela {
                         }
                     }
                     
-                    // Verificar fronteira apenas se ainda não encontrou caminho melhor  
+                    // Verifica fronteira apenas se não encontrou caminho melhor registrado
                     if !ja_tem_melhor_caminho {
                         for no_fronteira in self.fronteira.iter() {
                             if no_fronteira.id_estacao == id_vizinho && no_fronteira.custo_g_viagem <= custo_g_novo {
@@ -286,20 +300,20 @@ impl SolucionadorAEstrela {
                     }
                     
                     if !ja_tem_melhor_caminho {
-                        // Atualizamos o mapa de custos g para uso na reconstrução do caminho
+                        // Registra este novo caminho como melhor opção para esta estação
                         self.custos_g_viagem_mapa.insert(id_vizinho, custo_g_novo);
                         
-                        // Guardamos informação do predecessor 
+                        // Armazena informação do predecessor para reconstrução do caminho
                         self.predecessores_info.insert(
                             id_vizinho, 
                             (no_da_fronteira_atual.id_estacao, no_da_fronteira_atual.linha_chegada, conexao.cor_linha)
                         );
                         
-                        // Criamos um novo caminho adicionando o vizinho atual
+                        // Cria novo caminho estendendo o atual com este vizinho
                         let mut novo_caminho = no_da_fronteira_atual.caminho.clone();
                         novo_caminho.push(id_vizinho);
                         
-                        // Mostrar o caminho completo até agora para depuração
+                        // Mostra o caminho completo até agora para depuração
                         let caminho_str = novo_caminho.iter()
                             .map(|&id| format!("E{}", id+1))
                             .collect::<Vec<_>>()
@@ -307,7 +321,7 @@ impl SolucionadorAEstrela {
                             
                         println!("      Novo caminho: {} (custo g={:.1})", caminho_str, custo_g_novo);
                         
-                        // Criamos um novo nó para a fronteira
+                        // Adiciona novo estado na fronteira para análise futura
                         let novo_no = EstadoNoFronteira {
                             id_estacao: id_vizinho,
                             linha_chegada: Some(conexao.cor_linha),
@@ -354,7 +368,9 @@ impl SolucionadorAEstrela {
         }
     }
 
-    // Novo método para criar InfoCaminho diretamente do nó final
+    // PARTE 3: APRESENTAÇÃO DO RESULTADO - Constrói o itinerário final detalhado
+    // Esta função é chamada quando o destino é alcançado
+    // Reconstrói o caminho encontrado e calcula tempo total e baldeações
     fn criar_info_caminho_do_no(&self, no_final: &EstadoNoFronteira) -> InfoCaminho {
         let mut estacoes_com_linhas = Vec::new();
         let mut tempo_total = 0.0;
@@ -368,22 +384,24 @@ impl SolucionadorAEstrela {
             .join(" -> ");
         println!("Caminho: {}", caminho_str);
         
+        // Primeira estação não tem linha de chegada
         if !no_final.caminho.is_empty() {
             estacoes_com_linhas.push((no_final.caminho[0], None));
         }
         
+        // Processa cada trecho do caminho para calcular tempos e identificar baldeações
         for i in 1..no_final.caminho.len() {
             let id_estacao_atual = no_final.caminho[i];
             let id_estacao_anterior = no_final.caminho[i-1];
             
             let mut linha_usada: Option<CorLinha> = None;
-            // Tempo da conexão será preenchido ao encontrar a conexão correta
             #[allow(unused_assignments)]
             let mut tempo_conexao = 0.0;
             
             println!("  {}: E{} -> E{} verificando conexão direta...",
                    i, id_estacao_anterior + 1, id_estacao_atual + 1);
             
+            // Busca a conexão específica entre as duas estações
             if let Some(conexoes) = self.grafo.lista_adjacencia.get(id_estacao_anterior) {
                 for conexao in conexoes {
                     if conexao.para_estacao == id_estacao_atual {
@@ -392,6 +410,7 @@ impl SolucionadorAEstrela {
                         
                         tempo_total += tempo_conexao;
                         
+                        // Verifica se houve mudança de linha (baldeação)
                         if i > 1 {
                             let linha_anterior = estacoes_com_linhas[i-1].1;
                             if linha_anterior != linha_usada {
@@ -421,11 +440,13 @@ impl SolucionadorAEstrela {
             estacoes_com_linhas.push((id_estacao_atual, linha_usada));
         }
         
+        // Formata e exibe o resultado final
         let horas = (tempo_total as i32) / 60;
         let minutos = (tempo_total as i32) % 60;
         println!("Número de baldeações: {}", baldeacoes);
         println!("Tempo total: {} h {} min ({:.1} min)", horas, minutos, tempo_total);
         
+        // Retorna estrutura com informações completas do itinerário
         InfoCaminho {
             estacoes_do_caminho: estacoes_com_linhas,
             tempo_total_minutos: tempo_total,
