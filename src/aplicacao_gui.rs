@@ -1614,6 +1614,11 @@ impl MinhaAplicacaoGUI {
                                             .strong()
                                     ).sense(egui::Sense::drag()));
                                     
+                                    // Mudar cursor quando sobre o título arrastável
+                                    if title_response.hovered() {
+                                        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                                    }
+                                    
                                     // Detectar arrasto no título
                                     if title_response.dragged() {
                                         acoes.push(AcaoPopup { 
