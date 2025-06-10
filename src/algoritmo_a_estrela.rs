@@ -1,5 +1,3 @@
-// src/algoritmo_a_estrela.rs
-
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::cmp::Ordering;
 use std::sync::Arc;

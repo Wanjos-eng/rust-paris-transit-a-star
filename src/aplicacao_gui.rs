@@ -1,5 +1,3 @@
-// src/aplicacao_gui.rs
-
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::cell::RefCell;
