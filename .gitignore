@@ -1,1 +1,32 @@
+# Rust
 /target/
+
+# Executáveis
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Pacotes/arquivos de distribuição
+*.zip
+*.tar.gz
+*.tar.bz2
+*.7z
+pacote_windows/
+dist/
+release/
+
+# IDEs/Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Logs
+*.log
