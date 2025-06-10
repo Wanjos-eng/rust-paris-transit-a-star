@@ -211,34 +211,79 @@ impl SolucionadorAEstrela {
                         0.0 // Primeira estação não tem baldeação
                     };
                     
-                    // CORREÇÃO: Aqui está o erro! Precisamos usar o valor correto do tempo de viagem
+                    // CORREÇÃO: Melhorar a string de debug para deixar claro que g é acumulativo
                     let custo_g_novo = no_da_fronteira_atual.custo_g_viagem + conexao.tempo_minutos + custo_baldeacao;
-                    let custo_h = self.grafo.obter_tempo_heuristico_minutos(id_vizinho, self.id_objetivo)
+                    let mut custo_h = self.grafo.obter_tempo_heuristico_minutos(id_vizinho, self.id_objetivo)
                         .unwrap_or(0.0);
+                    
+                    // CORREÇÃO CRÍTICA: Penalidade inteligente baseada na conectividade e contexto
+                    if let Some(conexoes_do_vizinho) = self.grafo.lista_adjacencia.get(id_vizinho) {
+                        let grau_conectividade = conexoes_do_vizinho.len();
+                        
+                        // Aplicar penalidade apenas se não for o destino
+                        if id_vizinho != self.id_objetivo {
+                            let penalidade = match grau_conectividade {
+                                1 => {
+                                    // Nó terminal: penalidade MUITO alta para desencorajar fortemente
+                                    // Usar o máximo entre uma penalidade fixa grande e a heurística multiplicada
+                                    let penalidade_fixa: f32 = 50.0; // Penalidade base alta
+                                    let penalidade_proporcional = custo_h * 2.0; // 200% da heurística
+                                    let penalidade_terminal = penalidade_fixa.max(penalidade_proporcional);
+                                    println!("      PENALIDADE TERMINAL ALTA: E{} é um beco sem saída (+{:.1}min)", 
+                                           id_vizinho + 1, penalidade_terminal);
+                                    penalidade_terminal
+                                },
+                                2 => {
+                                    // Baixa conectividade: penalidade moderada
+                                    let penalidade_baixa = custo_h * 0.3; // 30% da heurística
+                                    println!("      PENALIDADE BAIXA CONECTIVIDADE: E{} tem apenas 2 conexões (+{:.1}min)", 
+                                           id_vizinho + 1, penalidade_baixa);
+                                    penalidade_baixa
+                                },
+                                3 => {
+                                    // Conectividade média-baixa: penalidade leve
+                                    let penalidade_leve = custo_h * 0.1; // 10% da heurística  
+                                    if penalidade_leve > 1.0 {
+                                        println!("      PENALIDADE LEVE: E{} tem conectividade média-baixa (+{:.1}min)", 
+                                               id_vizinho + 1, penalidade_leve);
+                                    }
+                                    penalidade_leve
+                                },
+                                _ => 0.0 // Conectividade boa (4+): sem penalidade
+                            };
+                            custo_h += penalidade;
+                        }
+                    }
+                    
                     let custo_f = custo_g_novo + custo_h;
                     
-                    println!("      Custos: g_acumulado={:.1} + viagem={:.1} + baldeação={:.1} = {:.1}, h={:.1}, f={:.1}", 
-                             no_da_fronteira_atual.custo_g_viagem, // Valor acumulado anterior
+                    println!("      Custos: g_acumulado_anterior={:.1} + tempo_conexao={:.1} + baldeacao={:.1} = g_total_acumulado={:.1}, h={:.1}, f={:.1}", 
+                             no_da_fronteira_atual.custo_g_viagem, // Valor g acumulado anterior
                              conexao.tempo_minutos,               // Tempo da conexão atual
                              custo_baldeacao,                     // Custo de baldeação, se houver
-                             custo_g_novo,                        // Novo valor acumulado
-                             custo_h,
+                             custo_g_novo,                        // Novo valor g acumulado total
+                             custo_h,                             // Heurística (possivelmente penalizada)
                              custo_f);
                     
                     // Verificar se já temos um caminho melhor para esta estação na fronteira
                     let mut ja_tem_melhor_caminho = false;
-                    for no_fronteira in self.fronteira.iter() {
-                        if no_fronteira.id_estacao == id_vizinho && no_fronteira.custo_g_viagem <= custo_g_novo {
-                            ja_tem_melhor_caminho = true;
-                            println!("      Já existe um caminho melhor na fronteira com g={:.1}", no_fronteira.custo_g_viagem);
-                            break;
-                        }
-                    }
                     
+                    // CORREÇÃO: Verificação mais rigorosa de caminhos existentes
                     if let Some(&custo_g_registrado) = self.custos_g_viagem_mapa.get(&id_vizinho) {
                         if custo_g_registrado <= custo_g_novo {
                             ja_tem_melhor_caminho = true;
                             println!("      Já existe um caminho melhor registrado com g={:.1}", custo_g_registrado);
+                        }
+                    }
+                    
+                    // Verificar fronteira apenas se ainda não encontrou caminho melhor  
+                    if !ja_tem_melhor_caminho {
+                        for no_fronteira in self.fronteira.iter() {
+                            if no_fronteira.id_estacao == id_vizinho && no_fronteira.custo_g_viagem <= custo_g_novo {
+                                ja_tem_melhor_caminho = true;
+                                println!("      Já existe um caminho melhor na fronteira com g={:.1}", no_fronteira.custo_g_viagem);
+                                break;
+                            }
                         }
                     }
                     
