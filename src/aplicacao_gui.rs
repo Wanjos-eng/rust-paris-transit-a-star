@@ -1787,19 +1787,43 @@ impl eframe::App for MinhaAplicacaoGUI {
                 } else {
                     ui.label("Aguardando carregamento do grafo...");
                 }
+                
                 ui.separator();
-                if ui.button("Iniciar/Reiniciar Busca").clicked() {
+                ui.label(egui::RichText::new("Controles de Busca")
+                    .size(14.0)
+                    .strong());
+                ui.add_space(5.0);
+                
+                // Definir tamanho padrão para todos os botões
+                let tamanho_botao = egui::Vec2::new(200.0, 32.0);
+                
+                // Botões principais de controle organizados verticalmente
+                if ui.add_sized(tamanho_botao, egui::Button::new("Iniciar/Reiniciar Busca")).clicked() {
                     self.iniciar_busca_a_estrela();
                 }
-                if ui.button("Limpar Tudo").clicked() {
+                
+                ui.add_space(3.0);
+                
+                if ui.add_sized(tamanho_botao, egui::Button::new("Limpar Tudo")).clicked() {
                     self.limpar_estado_visual();
                     self.mensagem_status_ui = "Estado limpo. Selecione início/fim e inicie nova busca.".to_string();
                 }
+                
+                // Botões de execução (apenas quando há busca ativa)
                 if self.solucionador_a_estrela.is_some() {
-                    if ui.button("Próximo Passo").clicked() {
+                    ui.add_space(8.0);
+                    ui.label(egui::RichText::new("Execução Passo a Passo")
+                        .size(13.0)
+                        .strong());
+                    ui.add_space(5.0);
+                    
+                    if ui.add_sized(tamanho_botao, egui::Button::new("Próximo Passo")).clicked() {
                         self.executar_proximo_passo_a_estrela();
                     }
-                    if ui.button("Executar Tudo").clicked() {
+                    
+                    ui.add_space(3.0);
+                    
+                    if ui.add_sized(tamanho_botao, egui::Button::new("Executar Tudo")).clicked() {
                         for _i in 0..NUMERO_ESTACOES * NUMERO_ESTACOES * 2 {
                             if self.solucionador_a_estrela.is_none() {
                                 break;
@@ -1935,10 +1959,22 @@ impl eframe::App for MinhaAplicacaoGUI {
                     }
                 }
                 ui.separator();
-                ui.label("Opções de Visualização");
-                ui.add(egui::Slider::new(&mut self.zoom_nivel, 0.5..=2.0)
-                    .text("Zoom")
-                    .step_by(0.1));
+                ui.label(egui::RichText::new("Opções de Visualização")
+                    .size(14.0)
+                    .strong());
+                ui.add_space(5.0);
+                
+                // Slider de zoom com tamanho padronizado
+                ui.horizontal(|ui| {
+                    ui.label("Zoom:");
+                    ui.add_sized([140.0, 20.0], egui::Slider::new(&mut self.zoom_nivel, 0.5..=2.0)
+                        .show_value(true)
+                        .step_by(0.1));
+                });
+                
+                ui.add_space(3.0);
+                
+                // Checkboxes organizados
                 ui.checkbox(&mut self.mostrar_linha_atual, "Mostrar Linha Atual");
                 ui.checkbox(&mut self.mostrar_tempos_conexao, "Mostrar Tempos entre Estações");
             });
