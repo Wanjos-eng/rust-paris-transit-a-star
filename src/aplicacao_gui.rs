@@ -736,10 +736,11 @@ impl MinhaAplicacaoGUI {
                                     
                                     // Cabeçalho do pop-up
                                     ui.horizontal(|ui| {
-                                        ui.label(egui::RichText::new("🔍")
-                                            .size(16.0)
-                                            .color(egui::Color32::from_rgb(255, 165, 0)));
-                                        ui.label(egui::RichText::new("Análise do Vizinho A*")
+                                        ui.label(egui::RichText::new("[A*]")
+                                            .size(14.0)
+                                            .color(egui::Color32::from_rgb(255, 165, 0))
+                                            .strong());
+                                        ui.label(egui::RichText::new("Análise do Vizinho")
                                             .size(14.0)
                                             .color(egui::Color32::from_rgb(255, 165, 0))
                                             .strong());
@@ -748,12 +749,12 @@ impl MinhaAplicacaoGUI {
                                     ui.separator();
                                     
                                     // Nome completo da estação
-                                    ui.label(egui::RichText::new(format!("📍 Estação: {}", estacao_nome))
+                                    ui.label(egui::RichText::new(format!("Estação: {}", estacao_nome))
                                         .size(13.0)
                                         .color(egui::Color32::WHITE)
                                         .strong());
                                     
-                                    ui.label(egui::RichText::new(format!("🆔 ID: E{}", id_estacao + 1))
+                                    ui.label(egui::RichText::new(format!("ID: E{}", id_estacao + 1))
                                         .size(11.0)
                                         .color(egui::Color32::from_rgb(200, 200, 200)));
                                     
@@ -761,7 +762,7 @@ impl MinhaAplicacaoGUI {
                                     
                                     // Valores do algoritmo A* com explicações - DESTAQUE PRINCIPAL
                                     ui.add_space(8.0);
-                                    ui.label(egui::RichText::new("🎯 VALORES FUNDAMENTAIS DO A*")
+                                    ui.label(egui::RichText::new("VALORES FUNDAMENTAIS DO A*")
                                         .size(14.0)
                                         .color(egui::Color32::from_rgb(255, 215, 0))
                                         .strong());
@@ -844,7 +845,7 @@ impl MinhaAplicacaoGUI {
                                                 
                                                 // Fórmula visual destacada
                                                 ui.horizontal(|ui| {
-                                                    ui.label(egui::RichText::new("💡 Fórmula:")
+                                                    ui.label(egui::RichText::new("Fórmula:")
                                                         .size(12.0)
                                                         .color(egui::Color32::from_rgb(255, 215, 0))
                                                         .strong());
@@ -873,7 +874,7 @@ impl MinhaAplicacaoGUI {
                                                     let g_val = valor_g.unwrap();
                                                     let h_val = valor_h.unwrap();
                                                     
-                                                    ui.label(egui::RichText::new("🔢 Valores:")
+                                                    ui.label(egui::RichText::new("Valores:")
                                                         .size(11.0)
                                                         .color(egui::Color32::from_rgb(200, 200, 200)));
                                                     ui.label(egui::RichText::new(format!("{:.1}", f_val))
@@ -902,7 +903,7 @@ impl MinhaAplicacaoGUI {
                                     
                                     // Informações de conectividade
                                     if let Some(conexoes) = grafo.lista_adjacencia.get(id_estacao) {
-                                        ui.label(egui::RichText::new("🚇 Conexões Disponíveis:")
+                                        ui.label(egui::RichText::new("Conexões Disponíveis:")
                                             .size(12.0)
                                             .color(egui::Color32::from_rgb(150, 255, 150))
                                             .strong());
@@ -931,7 +932,7 @@ impl MinhaAplicacaoGUI {
                                     
                                     // Dica de interação
                                     ui.separator();
-                                    ui.label(egui::RichText::new("💡 Clique para ver informações detalhadas")
+                                    ui.label(egui::RichText::new("Clique para ver informações detalhadas")
                                         .size(9.0)
                                         .color(egui::Color32::from_rgb(150, 150, 150))
                                         .italics());
@@ -966,9 +967,10 @@ impl MinhaAplicacaoGUI {
                         
                         // Cabeçalho
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("🚇")
-                                .size(16.0)
-                                .color(egui::Color32::from_rgb(100, 150, 200)));
+                            ui.label(egui::RichText::new("[INFO]")
+                                .size(14.0)
+                                .color(egui::Color32::from_rgb(100, 150, 200))
+                                .strong());
                             ui.label(egui::RichText::new("Informações da Estação")
                                 .size(13.0)
                                 .color(egui::Color32::from_rgb(100, 150, 200))
@@ -978,12 +980,12 @@ impl MinhaAplicacaoGUI {
                         ui.separator();
                         
                         // Nome e ID da estação
-                        ui.label(egui::RichText::new(format!("📍 {}", estacao.nome))
+                        ui.label(egui::RichText::new(format!("{}", estacao.nome))
                             .size(14.0)
                             .color(egui::Color32::WHITE)
                             .strong());
                         
-                        ui.label(egui::RichText::new(format!("🆔 Identificador: E{}", id_estacao + 1))
+                        ui.label(egui::RichText::new(format!("Identificador: E{}", id_estacao + 1))
                             .size(11.0)
                             .color(egui::Color32::from_rgb(200, 200, 200)));
                         
@@ -1001,7 +1003,7 @@ impl MinhaAplicacaoGUI {
                                         if valor_f.is_some() || valor_g.is_some() || valor_h.is_some() {
                                             valores_a_star_encontrados = true;
                                             
-                                            ui.label(egui::RichText::new("🎯 VALORES A* DISPONÍVEIS")
+                                            ui.label(egui::RichText::new("VALORES A* DISPONÍVEIS")
                                                 .size(13.0)
                                                 .color(egui::Color32::from_rgb(255, 215, 0))
                                                 .strong());
@@ -1085,27 +1087,27 @@ impl MinhaAplicacaoGUI {
                         
                         // Status atual da estação
                         if id_estacao == self.id_estacao_inicio_selecionada {
-                            ui.label(egui::RichText::new("🏁 Estação de INÍCIO")
+                            ui.label(egui::RichText::new("Estação de INÍCIO")
                                 .size(12.0)
                                 .color(egui::Color32::from_rgb(100, 255, 100))
                                 .strong());
                         } else if id_estacao == self.id_estacao_objetivo_selecionada {
-                            ui.label(egui::RichText::new("🎯 Estação de DESTINO")
+                            ui.label(egui::RichText::new("Estação de DESTINO")
                                 .size(12.0)
                                 .color(egui::Color32::from_rgb(255, 100, 100))
                                 .strong());
                         } else if self.estacoes_exploradas_ui.contains(&id_estacao) && self.resultado_caminho_ui.is_some() {
-                            ui.label(egui::RichText::new("✅ Parte da rota encontrada")
+                            ui.label(egui::RichText::new("Parte da rota encontrada")
                                 .size(12.0)
                                 .color(egui::Color32::from_rgb(100, 255, 150))
                                 .strong());
                         } else if self.estacoes_exploradas_ui.contains(&id_estacao) {
-                            ui.label(egui::RichText::new("🔍 Sendo explorada")
+                            ui.label(egui::RichText::new("Sendo explorada")
                                 .size(12.0)
                                 .color(egui::Color32::from_rgb(150, 200, 255))
                                 .strong());
                         } else {
-                            ui.label(egui::RichText::new("⚪ Estação disponível")
+                            ui.label(egui::RichText::new("Estação disponível")
                                 .size(12.0)
                                 .color(egui::Color32::from_rgb(180, 180, 180)));
                         }
@@ -1114,7 +1116,7 @@ impl MinhaAplicacaoGUI {
                         
                         // Informações de conectividade
                         if let Some(conexoes) = grafo.lista_adjacencia.get(id_estacao) {
-                            ui.label(egui::RichText::new("🚇 Linhas disponíveis:")
+                            ui.label(egui::RichText::new("Linhas disponíveis:")
                                 .size(11.0)
                                 .color(egui::Color32::from_rgb(150, 200, 255))
                                 .strong());
@@ -1141,14 +1143,14 @@ impl MinhaAplicacaoGUI {
                             });
                             
                             ui.add_space(4.0);
-                            ui.label(egui::RichText::new(format!("🔗 Conexões diretas: {}", conexoes.len()))
+                            ui.label(egui::RichText::new(format!("Conexões diretas: {}", conexoes.len()))
                                 .size(10.0)
                                 .color(egui::Color32::from_rgb(180, 180, 180)));
                         }
                         
                         ui.add_space(6.0);
                         ui.separator();
-                        ui.label(egui::RichText::new("💡 Clique para ver mais detalhes")
+                        ui.label(egui::RichText::new("Clique para ver mais detalhes")
                             .size(9.0)
                             .color(egui::Color32::from_rgb(150, 150, 150))
                             .italics());
@@ -1511,24 +1513,24 @@ impl MinhaAplicacaoGUI {
         let estacao = &grafo.estacoes[id_estacao];
         
         // Criar conteúdo mais detalhado para o popup persistente
-        let mut conteudo = format!("📍 Estação: {}\n🆔 ID: E{}\n\n", estacao.nome, id_estacao + 1);
+        let mut conteudo = format!("Estação: {}\nID: E{}\n\n", estacao.nome, id_estacao + 1);
         
         // Status da estação
         if id_estacao == self.id_estacao_inicio_selecionada {
-            conteudo.push_str("🏁 Status: ESTAÇÃO DE INÍCIO\n\n");
+            conteudo.push_str("Status: ESTAÇÃO DE INÍCIO\n\n");
         } else if id_estacao == self.id_estacao_objetivo_selecionada {
-            conteudo.push_str("🎯 Status: ESTAÇÃO DE DESTINO\n\n");
+            conteudo.push_str("Status: ESTAÇÃO DE DESTINO\n\n");
         } else if self.estacoes_exploradas_ui.contains(&id_estacao) && self.resultado_caminho_ui.is_some() {
-            conteudo.push_str("✅ Status: PARTE DA ROTA ENCONTRADA\n\n");
+            conteudo.push_str("Status: PARTE DA ROTA ENCONTRADA\n\n");
         } else if self.estacoes_exploradas_ui.contains(&id_estacao) {
-            conteudo.push_str("🔍 Status: SENDO EXPLORADA\n\n");
+            conteudo.push_str("Status: SENDO EXPLORADA\n\n");
         } else {
-            conteudo.push_str("⚪ Status: DISPONÍVEL\n\n");
+            conteudo.push_str("Status: DISPONÍVEL\n\n");
         }
         
         // Informações de conectividade
         if let Some(conexoes) = grafo.lista_adjacencia.get(id_estacao) {
-            conteudo.push_str("🚇 CONEXÕES DISPONÍVEIS:\n");
+            conteudo.push_str("CONEXÕES DISPONÍVEIS:\n");
             
             let mut linhas_conectadas: std::collections::HashSet<CorLinha> = std::collections::HashSet::new();
             for conexao in conexoes {
@@ -1546,10 +1548,10 @@ impl MinhaAplicacaoGUI {
                 conteudo.push_str(&format!("• {}\n", nome_linha));
             }
             
-            conteudo.push_str(&format!("\n🔗 Total de conexões diretas: {}\n\n", conexoes.len()));
+            conteudo.push_str(&format!("\nTotal de conexões diretas: {}\n\n", conexoes.len()));
             
             // Mostrar algumas conexões diretas
-            conteudo.push_str("🚉 ESTAÇÕES CONECTADAS:\n");
+            conteudo.push_str("ESTAÇÕES CONECTADAS:\n");
             let mut conexoes_mostradas = 0;
             for conexao in conexoes.iter().take(5) { // Mostrar apenas as primeiras 5
                 let estacao_destino = &grafo.estacoes[conexao.para_estacao];
@@ -1562,7 +1564,7 @@ impl MinhaAplicacaoGUI {
             }
         }
         
-        conteudo.push_str("\n💡 Use os controles do painel lateral para\n   selecionar início e destino");
+        conteudo.push_str("\nUse os controles do painel lateral para\n   selecionar início e destino");
         
         let popup = PopupInfo {
             id_estacao,
@@ -1602,9 +1604,10 @@ impl MinhaAplicacaoGUI {
                                 
                                 // Cabeçalho do popup com título arrastável e botão de fechar melhorado
                                 let _header_response = ui.horizontal(|ui| {
-                                    ui.label(egui::RichText::new("📋")
-                                        .size(16.0)
-                                        .color(egui::Color32::from_rgb(120, 150, 200)));
+                                    ui.label(egui::RichText::new("[INFO]")
+                                        .size(14.0)
+                                        .color(egui::Color32::from_rgb(120, 150, 200))
+                                        .strong());
                                     
                                     // Título que serve como área de arrasto
                                     let title_response = ui.add(egui::Label::new(
@@ -1632,8 +1635,8 @@ impl MinhaAplicacaoGUI {
                                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                         // Botão X mais visível e elegante
                                         let close_button = egui::Button::new(
-                                            egui::RichText::new("✖")
-                                                .size(14.0)
+                                            egui::RichText::new("×")
+                                                .size(16.0)
                                                 .color(egui::Color32::WHITE)
                                         )
                                         .fill(egui::Color32::from_rgb(180, 50, 50))
@@ -1654,7 +1657,7 @@ impl MinhaAplicacaoGUI {
                                 });
                                 
                                 // Dica visual de que pode ser arrastado
-                                ui.label(egui::RichText::new("🖱️ Arraste o título para mover o popup")
+                                ui.label(egui::RichText::new("Arraste o título para mover o popup")
                                     .size(9.0)
                                     .color(egui::Color32::from_rgb(150, 150, 150))
                                     .italics());
@@ -1669,7 +1672,7 @@ impl MinhaAplicacaoGUI {
                                         for linha in popup.conteudo.lines() {
                                             if linha.trim().is_empty() {
                                                 ui.add_space(4.0);
-                                            } else if linha.starts_with("📍") || linha.starts_with("🆔") {
+                                            } else if linha.starts_with("Estação:") || linha.starts_with("ID:") {
                                                 // Títulos principais
                                                 ui.label(egui::RichText::new(linha)
                                                     .size(13.0)
@@ -1720,7 +1723,7 @@ impl MinhaAplicacaoGUI {
                                                 ui.label(egui::RichText::new(linha)
                                                     .size(10.0)
                                                     .color(egui::Color32::from_rgb(200, 200, 200)));
-                                            } else if linha.starts_with("🔗") || linha.starts_with("💡") {
+                                            } else if linha.contains("Total de conexões") || linha.contains("Use os controles") {
                                                 // Informações adicionais
                                                 ui.label(egui::RichText::new(linha)
                                                     .size(10.0)
@@ -1739,9 +1742,10 @@ impl MinhaAplicacaoGUI {
                                 
                                 // Rodapé com dica
                                 ui.horizontal(|ui| {
-                                    ui.label(egui::RichText::new("💡")
-                                        .size(12.0)
-                                        .color(egui::Color32::from_rgb(150, 150, 150)));
+                                    ui.label(egui::RichText::new("[TIP]")
+                                        .size(11.0)
+                                        .color(egui::Color32::from_rgb(150, 150, 150))
+                                        .strong());
                                     ui.label(egui::RichText::new("Arraste este popup para movê-lo")
                                         .size(9.0)
                                         .color(egui::Color32::from_rgb(150, 150, 150))
@@ -1813,7 +1817,7 @@ impl eframe::App for MinhaAplicacaoGUI {
                 ui.label(&self.mensagem_status_ui);
                 if let Some(info_caminho) = &self.resultado_caminho_ui {
                     ui.separator();
-                    ui.heading("📍 Resumo da Rota");
+                    ui.heading("Resumo da Rota");
                     
                     // Adiciona um quadro com fundo para destacar as informações principais
                     egui::Frame::group(ui.style())
@@ -1882,11 +1886,11 @@ impl eframe::App for MinhaAplicacaoGUI {
                                         for (idx, (id_est, linha_chegada_op)) in info_caminho.estacoes_do_caminho.iter().enumerate() {
                                             let nome_est = &grafo.estacoes[*id_est].nome;
                                             
-                                            // Marca as estações de início e fim com ícones
+                                            // Marca as estações de início e fim com símbolos
                                             let label_idx = if idx == 0 {
-                                                format!("🏁")
+                                                format!("[INÍCIO]")
                                             } else if idx == info_caminho.estacoes_do_caminho.len() - 1 {
-                                                format!("🎯")
+                                                format!("[FIM]")
                                             } else {
                                                 format!("{}", idx + 1)
                                             };
@@ -1901,8 +1905,8 @@ impl eframe::App for MinhaAplicacaoGUI {
                                                     .strong()
                                                     .color(egui::Color32::from_rgb(255, 220, 150));
                                                 
-                                                // Adiciona ícone de baldeação
-                                                ui.label(egui::RichText::new(format!("🔄 {}", nome_estacao_texto.text())));
+                                                // Adiciona indicador de baldeação
+                                                ui.label(egui::RichText::new(format!("[BALDEAÇÃO] {}", nome_estacao_texto.text())));
                                             } else {
                                                 ui.label(nome_estacao_texto);
                                             }
