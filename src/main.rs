@@ -1,7 +1,7 @@
 mod grafo_metro;
 mod dados_metro;
 mod algoritmo_a_estrela;
-mod aplicacao_gui; // Nosso módulo da GUI
+mod aplicacao_gui;
 
 use aplicacao_gui::MinhaAplicacaoGUI; // Importa nossa struct da aplicação
 

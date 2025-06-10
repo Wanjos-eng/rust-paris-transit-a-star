@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use egui::{Color32, ComboBox, Pos2, Stroke, Vec2, Id};
 
 use crate::grafo_metro::{CorLinha, GrafoMetro, IdEstacao, NUMERO_ESTACOES};
-use crate::algoritmo_a_estrela::{EstadoNoFronteira, InfoCaminho, SolucionadorAEstrela};
+use crate::algoritmo_a_estrela::{InfoCaminho, SolucionadorAEstrela};
 
 #[derive(Clone, Debug)]
 struct PopupInfo {
@@ -40,10 +40,10 @@ pub struct MinhaAplicacaoGUI {
     resultado_caminho_ui: Option<InfoCaminho>,
     mensagem_status_ui: String,
     posicoes_estacoes_tela: Vec<Pos2>,
-    no_expandido_atualmente_ui: Option<EstadoNoFronteira>,
-    nos_explorados_ui: HashSet<IdEstacao>, // Novo campo para rastrear estações já exploradas
-    detalhes_analise_ui: Vec<String>, // Novo campo para mostrar detalhes da análise
-    vizinhos_sendo_analisados: HashSet<IdEstacao>, // Novo campo para vizinhos sendo analisados
+    estacao_sendo_expandida_ui: Option<IdEstacao>, // Estação que está sendo expandida atualmente
+    estacoes_exploradas_ui: HashSet<IdEstacao>, // Estações já completamente exploradas (conjunto fechado)
+    detalhes_analise_ui: Vec<String>, // Detalhes da análise para exibição
+    vizinhos_sendo_analisados_ui: HashSet<IdEstacao>, // Vizinhos da estação sendo expandida
     zoom_nivel: f32,
     mostrar_linha_atual: bool,
     mostrar_tempos_conexao: bool, // Nova opção para controlar a visibilidade dos tempos
@@ -56,6 +56,8 @@ pub struct MinhaAplicacaoGUI {
     estacao_sendo_arrastada: Option<IdEstacao>,
     // Controle de atualização para reduzir piscamento
     ultimo_tempo_animacao: f32,
+    // Controle de centralização seguro
+    ja_centralizou: bool,
 
 }
 
@@ -101,10 +103,10 @@ impl MinhaAplicacaoGUI {
             resultado_caminho_ui: None,
             mensagem_status_ui: "Selecione início/fim e inicie a busca.".to_string(),
             solucionador_a_estrela: None,
-            no_expandido_atualmente_ui: None,
-            nos_explorados_ui: HashSet::new(), // Inicializamos vazio
+            estacao_sendo_expandida_ui: None,
+            estacoes_exploradas_ui: HashSet::new(), // Inicializamos vazio
             detalhes_analise_ui: Vec::new(), // Inicializamos vazio
-            vizinhos_sendo_analisados: HashSet::new(), // Inicializamos vazio
+            vizinhos_sendo_analisados_ui: HashSet::new(), // Inicializamos vazio
             zoom_nivel: 0.70, // Zoom inicial mais afastado para melhor visualização
             mostrar_linha_atual: true,
             mostrar_tempos_conexao: true, // Iniciar com os tempos visíveis
@@ -116,22 +118,34 @@ impl MinhaAplicacaoGUI {
             offset_arrasto_popup_atual: None,
             estacao_sendo_arrastada: None,
             ultimo_tempo_animacao: 0.0,
+            ja_centralizou: false,
         }
         // Removido código duplicado do Self retornado
     }
 
     // Todos os métodos necessários
+    fn limpar_estado_visual(&mut self) {
+        // Método central para limpar todos os estados visuais do algoritmo
+        self.resultado_caminho_ui = None;
+        self.estacao_sendo_expandida_ui = None;
+        self.estacoes_exploradas_ui.clear();
+        self.detalhes_analise_ui.clear();
+        self.vizinhos_sendo_analisados_ui.clear();
+        self.solucionador_a_estrela = None;
+    }
+
     fn iniciar_busca_a_estrela(&mut self) {
         if let Some(ref grafo) = self.grafo_metro {
             let grafo_arco = Arc::clone(grafo);
             let id_inicio = self.id_estacao_inicio_selecionada;
             let id_objetivo = self.id_estacao_objetivo_selecionada;
             
-            // Resetar estado do algoritmo
-            self.resultado_caminho_ui = None;
-            self.no_expandido_atualmente_ui = None;
-            self.nos_explorados_ui.clear(); // Limpar nós explorados anteriores
-            self.detalhes_analise_ui.clear(); // Limpar detalhes da análise anterior
+            // Extrair nomes das estações antes de limpar o estado
+            let nome_inicio = grafo.estacoes[id_inicio].nome.clone();
+            let nome_objetivo = grafo.estacoes[id_objetivo].nome.clone();
+            
+            // Usar o método central para resetar estado
+            self.limpar_estado_visual();
             
             // Criar o solucionador com os parâmetros atuais da interface
             let solucionador = SolucionadorAEstrela::novo(
@@ -144,8 +158,8 @@ impl MinhaAplicacaoGUI {
             self.solucionador_a_estrela = Some(solucionador);
             self.mensagem_status_ui = format!(
                 "Busca iniciada: De {} para {}", 
-                grafo.estacoes[id_inicio].nome, 
-                grafo.estacoes[id_objetivo].nome
+                nome_inicio, 
+                nome_objetivo
             );
         } else {
             self.mensagem_status_ui = "Erro: Grafo não carregado.".to_string();
@@ -156,112 +170,87 @@ impl MinhaAplicacaoGUI {
         if let Some(ref mut solucionador) = self.solucionador_a_estrela {
             match solucionador.proximo_passo() {
                 crate::algoritmo_a_estrela::ResultadoPassoAEstrela::EmProgresso => {
-                    // Se tem nós na fronteira, mostramos o primeiro (de menor custo)
-                    if let Some(no_fronteira) = solucionador.fronteira.peek() {
-                        self.no_expandido_atualmente_ui = Some(no_fronteira.clone());
+                    // Atualizar a visualização com base na análise atual
+                    if let Some(ref analise) = solucionador.ultima_analise {
+                        // A estação que foi expandida (retirada da fronteira e analisada)
+                        self.estacao_sendo_expandida_ui = Some(analise.estacao_expandida);
                         
-                        // Mostrar o caminho parcial atual (do nó que será expandido) 
-                        self.nos_explorados_ui.clear();
-                        // Adicionar todas as estações do caminho parcial atual
-                        for &id_estacao in &no_fronteira.caminho {
-                            self.nos_explorados_ui.insert(id_estacao);
-                        }
+                        // Adicionar a estação expandida ao conjunto de exploradas
+                        self.estacoes_exploradas_ui.insert(analise.estacao_expandida);
                         
-                        // Capturar os vizinhos sendo analisados se há detalhes da análise
-                        self.vizinhos_sendo_analisados.clear();
-                        if let Some(ref analise) = solucionador.ultima_analise {
-                            println!("DEBUG: Analisando {} vizinhos:", analise.vizinhos_analisados.len());
-                            
-                            // Extrair IDs das estações dos vizinhos analisados
-                            for vizinho_info in &analise.vizinhos_analisados {
-                                println!("DEBUG: String original: '{}'", vizinho_info);
-                                
-                                // O formato pode ser:
-                                // "E{id}: g=X, h=Y, f=Z - ADICIONADO"
-                                // "E{id}: já tem caminho melhor"
-                                // "E{id}: já explorado"
-                                // Vamos extrair sempre o ID que aparece depois de "E"
-                                if let Some(inicio_e) = vizinho_info.find('E') {
-                                    if let Some(pos_dois_pontos) = vizinho_info.find(':') {
-                                        if pos_dois_pontos > inicio_e + 1 {
-                                            let numero_str = &vizinho_info[inicio_e + 1..pos_dois_pontos];
-                                            println!("DEBUG: Tentando parsear número: '{}'", numero_str);
-                                            
-                                            if let Ok(id_estacao_um_baseado) = numero_str.parse::<usize>() {
-                                                if id_estacao_um_baseado > 0 {
-                                                    let id_estacao = id_estacao_um_baseado - 1; // Converter para zero-based
-                                                    self.vizinhos_sendo_analisados.insert(id_estacao);
-                                                    println!("DEBUG: ✓ Extraído vizinho E{} da string: '{}'", 
-                                                           id_estacao_um_baseado, vizinho_info);
-                                                } else {
-                                                    println!("DEBUG: ✗ ID inválido (zero ou negativo): {}", id_estacao_um_baseado);
+                        // Extrair os vizinhos que estão sendo analisados
+                        self.vizinhos_sendo_analisados_ui.clear();
+                        for vizinho_info in &analise.vizinhos_analisados {
+                            // Extrair ID da estação do formato "E{id}: ..."
+                            if let Some(inicio_e) = vizinho_info.find('E') {
+                                if let Some(pos_dois_pontos) = vizinho_info.find(':') {
+                                    if pos_dois_pontos > inicio_e + 1 {
+                                        let numero_str = &vizinho_info[inicio_e + 1..pos_dois_pontos];
+                                        if let Ok(id_estacao_um_baseado) = numero_str.parse::<usize>() {
+                                            if id_estacao_um_baseado > 0 {
+                                                let id_estacao = id_estacao_um_baseado - 1; // Converter para zero-based
+                                                // Só adicionar se não foi explorado ainda
+                                                if !self.estacoes_exploradas_ui.contains(&id_estacao) {
+                                                    self.vizinhos_sendo_analisados_ui.insert(id_estacao);
                                                 }
-                                            } else {
-                                                println!("DEBUG: ✗ Falha ao parsear número: '{}'", numero_str);
                                             }
-                                        } else {
-                                            println!("DEBUG: ✗ Posição dos dois pontos inválida: inicio_e={}, pos_dois_pontos={}", 
-                                                   inicio_e, pos_dois_pontos);
                                         }
-                                    } else {
-                                        println!("DEBUG: ✗ Não encontrou ':' na string");
                                     }
-                                } else {
-                                    println!("DEBUG: ✗ Não encontrou 'E' na string");
                                 }
                             }
-                            
-                            println!("DEBUG: === RESULTADO FINAL ===");
-                            println!("DEBUG: Total de vizinhos sendo analisados: {}", self.vizinhos_sendo_analisados.len());
-                            for &id in &self.vizinhos_sendo_analisados {
-                                println!("  - E{}", id + 1);
-                            }
-                            println!("DEBUG: ========================");
-                            
-                            // Atualizar detalhes da análise para exibição
-                            self.detalhes_analise_ui = analise.vizinhos_analisados.clone();
                         }
                         
+                        // Atualizar detalhes da análise para exibição
+                        self.detalhes_analise_ui = analise.vizinhos_analisados.clone();
+                        
+                        let nome_estacao = if let Some(ref grafo) = self.grafo_metro {
+                            &grafo.estacoes[analise.estacao_expandida].nome
+                        } else {
+                            "Desconhecida"
+                        };
+                        
                         self.mensagem_status_ui = format!(
-                            "Analisando estação: {}",
-                            no_fronteira.id_estacao + 1 // +1 para exibir baseado em 1 para o usuário
+                            "Expandindo estação: {} (E{}) - {} vizinhos analisados",
+                            nome_estacao,
+                            analise.estacao_expandida + 1,
+                            self.vizinhos_sendo_analisados_ui.len()
                         );
                     } else {
-                        self.mensagem_status_ui = "Fronteira vazia, não há solução.".to_string();
-                        self.solucionador_a_estrela = None;
+                        self.mensagem_status_ui = "Passo em progresso, mas sem detalhes da análise.".to_string();
                     }
                 },
                 crate::algoritmo_a_estrela::ResultadoPassoAEstrela::CaminhoEncontrado(caminho_info) => {
                     self.resultado_caminho_ui = Some(caminho_info.clone());
                     
-                    // Poplar nos_explorados_ui com as estações do caminho final
-                    self.nos_explorados_ui.clear();
+                    // Limpar estados temporários da busca
+                    self.estacao_sendo_expandida_ui = None;
+                    self.vizinhos_sendo_analisados_ui.clear();
+                    
+                    // Marcar todas as estações do caminho final como exploradas
+                    self.estacoes_exploradas_ui.clear();
                     for (id_estacao, _) in &caminho_info.estacoes_do_caminho {
-                        self.nos_explorados_ui.insert(*id_estacao);
+                        self.estacoes_exploradas_ui.insert(*id_estacao);
                     }
                     
                     self.mensagem_status_ui = format!(
-                        "Caminho encontrado! Tempo: {:.1} min, Baldeações: {}",
+                        "✅ Caminho encontrado! Tempo: {:.1} min, Baldeações: {}",
                         caminho_info.tempo_total_minutos,
                         caminho_info.baldeacoes
                     );
-                    // Limpar vizinhos sendo analisados quando encontrar o caminho
-                    self.vizinhos_sendo_analisados.clear();
-                    self.no_expandido_atualmente_ui = None;
                     self.solucionador_a_estrela = None;
                 },
                 crate::algoritmo_a_estrela::ResultadoPassoAEstrela::NenhumCaminhoPossivel => {
-                    self.mensagem_status_ui = "Não foi possível encontrar um caminho.".to_string();
-                    // Limpar vizinhos sendo analisados quando não há caminho
-                    self.vizinhos_sendo_analisados.clear();
-                    self.no_expandido_atualmente_ui = None;
+                    self.mensagem_status_ui = "❌ Não foi possível encontrar um caminho.".to_string();
+                    // Limpar estados temporários
+                    self.estacao_sendo_expandida_ui = None;
+                    self.vizinhos_sendo_analisados_ui.clear();
                     self.solucionador_a_estrela = None;
                 },
                 crate::algoritmo_a_estrela::ResultadoPassoAEstrela::Erro(msg) => {
-                    self.mensagem_status_ui = format!("Erro: {}", msg);
-                    // Limpar vizinhos sendo analisados quando há erro
-                    self.vizinhos_sendo_analisados.clear();
-                    self.no_expandido_atualmente_ui = None;
+                    self.mensagem_status_ui = format!("❌ Erro: {}", msg);
+                    // Limpar estados temporários
+                    self.estacao_sendo_expandida_ui = None;
+                    self.vizinhos_sendo_analisados_ui.clear();
                     self.solucionador_a_estrela = None;
                 }
             }
@@ -270,21 +259,7 @@ impl MinhaAplicacaoGUI {
         }
     }
 
-    fn processar_clique_estacao(&mut self, id_estacao: IdEstacao, _grafo: &GrafoMetro) {
-        // Alternar entre definir como início ou fim
-        if self.id_estacao_inicio_selecionada == id_estacao {
-            // Se já é o início, muda para ser o objetivo
-            self.id_estacao_objetivo_selecionada = id_estacao;
-        } else {
-            // Caso contrário, define como início
-            self.id_estacao_inicio_selecionada = id_estacao;
-        }
-        
-        // Reinicia a busca se estiver em andamento
-        if self.solucionador_a_estrela.is_some() {
-            self.iniciar_busca_a_estrela();
-        }
-    }
+
 
     fn desenhar_conexoes(&self, painter: &egui::Painter, rect_desenho: egui::Rect, grafo: &GrafoMetro) {
         // Primeiro desenhar as conexões normais (não na solução)
@@ -957,7 +932,7 @@ impl MinhaAplicacaoGUI {
                                     
                                     // Dica de interação
                                     ui.separator();
-                                    ui.label(egui::RichText::new("💡 Clique na estação para selecioná-la")
+                                    ui.label(egui::RichText::new("💡 Clique para ver informações detalhadas")
                                         .size(9.0)
                                         .color(egui::Color32::from_rgb(150, 150, 150))
                                         .italics());
@@ -966,6 +941,126 @@ impl MinhaAplicacaoGUI {
                 }
             }
         }
+    }
+    
+    fn mostrar_popup_estacao_hover(&self, ui: &mut egui::Ui, pos_estacao: egui::Pos2, id_estacao: IdEstacao, grafo: &GrafoMetro) {
+        let estacao = &grafo.estacoes[id_estacao];
+        
+        // Posição do pop-up ajustada para não sobrepor a estação
+        let pos_popup = pos_estacao + egui::Vec2::new(25.0 * self.zoom_nivel, -60.0 * self.zoom_nivel);
+        
+        // ID estável para o popup
+        let popup_id = egui::Id::new(format!("hover_popup_normal_{}", id_estacao));
+        
+        egui::Area::new(popup_id)
+            .fixed_pos(pos_popup)
+            .order(egui::Order::Foreground)
+            .constrain(false)
+            .show(ui.ctx(), |ui| {
+                egui::Frame::popup(ui.style())
+                    .fill(egui::Color32::from_rgba_premultiplied(35, 35, 35, 240))
+                    .stroke(egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 150, 200)))
+                    .corner_radius(6.0)
+                    .inner_margin(egui::Margin::same(10))
+                    .show(ui, |ui| {
+                        ui.set_max_width(280.0);
+                        
+                        // Cabeçalho
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("🚇")
+                                .size(16.0)
+                                .color(egui::Color32::from_rgb(100, 150, 200)));
+                            ui.label(egui::RichText::new("Informações da Estação")
+                                .size(13.0)
+                                .color(egui::Color32::from_rgb(100, 150, 200))
+                                .strong());
+                        });
+                        
+                        ui.separator();
+                        
+                        // Nome e ID da estação
+                        ui.label(egui::RichText::new(format!("📍 {}", estacao.nome))
+                            .size(14.0)
+                            .color(egui::Color32::WHITE)
+                            .strong());
+                        
+                        ui.label(egui::RichText::new(format!("🆔 Identificador: E{}", id_estacao + 1))
+                            .size(11.0)
+                            .color(egui::Color32::from_rgb(200, 200, 200)));
+                        
+                        ui.add_space(6.0);
+                        
+                        // Status atual da estação
+                        if id_estacao == self.id_estacao_inicio_selecionada {
+                            ui.label(egui::RichText::new("🏁 Estação de INÍCIO")
+                                .size(12.0)
+                                .color(egui::Color32::from_rgb(100, 255, 100))
+                                .strong());
+                        } else if id_estacao == self.id_estacao_objetivo_selecionada {
+                            ui.label(egui::RichText::new("🎯 Estação de DESTINO")
+                                .size(12.0)
+                                .color(egui::Color32::from_rgb(255, 100, 100))
+                                .strong());
+                        } else if self.estacoes_exploradas_ui.contains(&id_estacao) && self.resultado_caminho_ui.is_some() {
+                            ui.label(egui::RichText::new("✅ Parte da rota encontrada")
+                                .size(12.0)
+                                .color(egui::Color32::from_rgb(100, 255, 150))
+                                .strong());
+                        } else if self.estacoes_exploradas_ui.contains(&id_estacao) {
+                            ui.label(egui::RichText::new("🔍 Sendo explorada")
+                                .size(12.0)
+                                .color(egui::Color32::from_rgb(150, 200, 255))
+                                .strong());
+                        } else {
+                            ui.label(egui::RichText::new("⚪ Estação disponível")
+                                .size(12.0)
+                                .color(egui::Color32::from_rgb(180, 180, 180)));
+                        }
+                        
+                        ui.add_space(6.0);
+                        
+                        // Informações de conectividade
+                        if let Some(conexoes) = grafo.lista_adjacencia.get(id_estacao) {
+                            ui.label(egui::RichText::new("🚇 Linhas disponíveis:")
+                                .size(11.0)
+                                .color(egui::Color32::from_rgb(150, 200, 255))
+                                .strong());
+                            
+                            let mut linhas_conectadas: std::collections::HashSet<CorLinha> = std::collections::HashSet::new();
+                            for conexao in conexoes {
+                                linhas_conectadas.insert(conexao.cor_linha);
+                            }
+                            
+                            ui.horizontal_wrapped(|ui| {
+                                for linha in &linhas_conectadas {
+                                    let (cor_linha, nome_linha) = match linha {
+                                        CorLinha::Azul => (egui::Color32::from_rgb(0, 120, 255), "Azul"),
+                                        CorLinha::Amarela => (egui::Color32::from_rgb(255, 215, 0), "Amarela"),
+                                        CorLinha::Vermelha => (egui::Color32::RED, "Vermelha"),
+                                        CorLinha::Verde => (egui::Color32::from_rgb(0, 180, 0), "Verde"),
+                                        _ => (egui::Color32::GRAY, "Outra"),
+                                    };
+                                    
+                                    ui.label(egui::RichText::new(format!("● {}", nome_linha))
+                                        .size(10.0)
+                                        .color(cor_linha));
+                                }
+                            });
+                            
+                            ui.add_space(4.0);
+                            ui.label(egui::RichText::new(format!("🔗 Conexões diretas: {}", conexoes.len()))
+                                .size(10.0)
+                                .color(egui::Color32::from_rgb(180, 180, 180)));
+                        }
+                        
+                        ui.add_space(6.0);
+                        ui.separator();
+                        ui.label(egui::RichText::new("💡 Clique para ver mais detalhes")
+                            .size(9.0)
+                            .color(egui::Color32::from_rgb(150, 150, 150))
+                            .italics());
+                    });
+            });
     }
     
     // Função auxiliar para extrair valores f, g, h da string de informação
@@ -1008,13 +1103,13 @@ impl MinhaAplicacaoGUI {
                 Some(("INÍCIO", Color32::from_rgb(0, 140, 0), Color32::from_rgb(20, 80, 20)))
             } else if i == self.id_estacao_objetivo_selecionada {
                 Some(("FIM", Color32::from_rgb(220, 50, 50), Color32::from_rgb(80, 20, 20)))
-            } else if self.nos_explorados_ui.contains(&i) && self.resultado_caminho_ui.is_some() {
+            } else if self.estacoes_exploradas_ui.contains(&i) && self.resultado_caminho_ui.is_some() {
                 // Só mostrar "CAMINHO" verde se realmente há uma solução final
                 Some(("CAMINHO", Color32::from_rgb(0, 120, 60), Color32::from_rgb(20, 60, 40)))
-            } else if self.nos_explorados_ui.contains(&i) && self.solucionador_a_estrela.is_some() {
+            } else if self.estacoes_exploradas_ui.contains(&i) && self.solucionador_a_estrela.is_some() {
                 // Mostrar "EXPLORANDO" azul para caminho parcial durante a busca
                 Some(("EXPLORANDO", Color32::from_rgb(60, 100, 200), Color32::from_rgb(30, 50, 100)))
-            } else if self.vizinhos_sendo_analisados.contains(&i) {
+            } else if self.vizinhos_sendo_analisados_ui.contains(&i) {
                 // Apenas vizinhos que NÃO estão no caminho atual recebem marcador "ANALISANDO"
                 Some(("ANALISANDO", Color32::from_rgb(255, 140, 0), Color32::from_rgb(120, 60, 0)))
             } else {
@@ -1099,7 +1194,7 @@ impl MinhaAplicacaoGUI {
             };
             
             // Determinar se esta estação é um vizinho sendo analisado
-            let e_vizinho_sendo_analisado = self.vizinhos_sendo_analisados.contains(&i);
+            let e_vizinho_sendo_analisado = self.vizinhos_sendo_analisados_ui.contains(&i);
             
             // Desenhar efeito visual para vizinhos sendo analisados
             if e_vizinho_sendo_analisado {
@@ -1122,10 +1217,10 @@ impl MinhaAplicacaoGUI {
             let cor_preenchimento = if i == self.id_estacao_inicio_selecionada {
                 // Estação de início fica verde escuro
                 Color32::from_rgb(0, 60, 0)
-            } else if self.nos_explorados_ui.contains(&i) && self.resultado_caminho_ui.is_some() {
+            } else if self.estacoes_exploradas_ui.contains(&i) && self.resultado_caminho_ui.is_some() {
                 // Estações do caminho FINAL (só quando há solução) ficam com verde mais claro
                 Color32::from_rgb(0, 40, 20) // Verde mais sutil para diferenciação
-            } else if self.nos_explorados_ui.contains(&i) && self.solucionador_a_estrela.is_some() {
+            } else if self.estacoes_exploradas_ui.contains(&i) && self.solucionador_a_estrela.is_some() {
                 // Estações do caminho PARCIAL (durante a busca) ficam com azul escuro
                 Color32::from_rgb(20, 30, 50) // Azul escuro para caminho parcial
             } else {
@@ -1153,9 +1248,9 @@ impl MinhaAplicacaoGUI {
                 (Color32::from_rgb(220, 50, 50), 3.0) // Vermelho para objetivo
             } else if e_vizinho_sendo_analisado {
                 (Color32::from_rgb(255, 140, 0), 2.5) // PRIORIDADE ALTA: Laranja para vizinhos sendo analisados
-            } else if self.nos_explorados_ui.contains(&i) && self.resultado_caminho_ui.is_some() {
+            } else if self.estacoes_exploradas_ui.contains(&i) && self.resultado_caminho_ui.is_some() {
                 (Color32::from_rgb(0, 180, 100), 2.5) // Verde-água apenas para estações do caminho FINAL
-            } else if self.nos_explorados_ui.contains(&i) && self.solucionador_a_estrela.is_some() {
+            } else if self.estacoes_exploradas_ui.contains(&i) && self.solucionador_a_estrela.is_some() {
                 (Color32::from_rgb(100, 150, 255), 2.5) // Azul claro para estações do caminho PARCIAL durante busca
             } else if esta_na_solucao {
                 (Color32::from_rgb(0, 150, 136), 3.0) // Verde-azul escuro para estações na solução final
@@ -1190,12 +1285,12 @@ impl MinhaAplicacaoGUI {
                 );
             }
             
-            // Interação: clique para abrir popup com informações detalhadas
+            // Interação: hover para mostrar informações detalhadas, clique para popup persistente
             let area_interacao = egui::Rect::from_center_size(pos, Vec2::splat(32.0 * self.zoom_nivel));
             let response = ui.interact(
                 area_interacao,
                 egui::Id::new(format!("estacao_{}", i)),
-                egui::Sense::click(),
+                egui::Sense::click_and_drag(),
             );
             
             // Se o mouse está sobre a estação, mostrar um realce
@@ -1206,16 +1301,20 @@ impl MinhaAplicacaoGUI {
                     Stroke::new(1.0 * self.zoom_nivel, Color32::WHITE)
                 );
                 
-                // Mostrar pop-up informativo para vizinhos sendo analisados
+                // Mostrar pop-up informativo SEMPRE quando hover (não só para vizinhos sendo analisados)
                 if e_vizinho_sendo_analisado {
+                    // Pop-up especial para vizinhos sendo analisados (com detalhes do algoritmo A*)
                     self.mostrar_popup_vizinho_hover(ui, pos, i, grafo);
+                } else {
+                    // Pop-up simples para estações normais
+                    self.mostrar_popup_estacao_hover(ui, pos, i, grafo);
                 }
             }
             
-            // Processar clique na estação
-            if response.clicked() {
-                // Processar o clique na estação - Selecionar como início/fim
-                self.processar_clique_estacao(i, grafo);
+            // Processar clique na estação para abrir popup persistente
+            if response.clicked() && !ui.input(|i| i.pointer.is_decidedly_dragging()) {
+                // Abrir popup persistente com informações da estação
+                self.abrir_popup_estacao(i, grafo);
             }
         }
     }
@@ -1296,35 +1395,211 @@ impl MinhaAplicacaoGUI {
 
     fn abrir_popup_estacao(&mut self, id_estacao: IdEstacao, grafo: &GrafoMetro) {
         let estacao = &grafo.estacoes[id_estacao];
-        let conteudo = format!("Estação: {}\nID: E{}", estacao.nome, id_estacao + 1);
+        
+        // Criar conteúdo mais detalhado para o popup persistente
+        let mut conteudo = format!("📍 Estação: {}\n🆔 ID: E{}\n\n", estacao.nome, id_estacao + 1);
+        
+        // Status da estação
+        if id_estacao == self.id_estacao_inicio_selecionada {
+            conteudo.push_str("🏁 Status: ESTAÇÃO DE INÍCIO\n\n");
+        } else if id_estacao == self.id_estacao_objetivo_selecionada {
+            conteudo.push_str("🎯 Status: ESTAÇÃO DE DESTINO\n\n");
+        } else if self.estacoes_exploradas_ui.contains(&id_estacao) && self.resultado_caminho_ui.is_some() {
+            conteudo.push_str("✅ Status: PARTE DA ROTA ENCONTRADA\n\n");
+        } else if self.estacoes_exploradas_ui.contains(&id_estacao) {
+            conteudo.push_str("🔍 Status: SENDO EXPLORADA\n\n");
+        } else {
+            conteudo.push_str("⚪ Status: DISPONÍVEL\n\n");
+        }
+        
+        // Informações de conectividade
+        if let Some(conexoes) = grafo.lista_adjacencia.get(id_estacao) {
+            conteudo.push_str("🚇 CONEXÕES DISPONÍVEIS:\n");
+            
+            let mut linhas_conectadas: std::collections::HashSet<CorLinha> = std::collections::HashSet::new();
+            for conexao in conexoes {
+                linhas_conectadas.insert(conexao.cor_linha);
+            }
+            
+            for linha in &linhas_conectadas {
+                let nome_linha = match linha {
+                    CorLinha::Azul => "Linha Azul",
+                    CorLinha::Amarela => "Linha Amarela", 
+                    CorLinha::Vermelha => "Linha Vermelha",
+                    CorLinha::Verde => "Linha Verde",
+                    _ => "Linha Desconhecida",
+                };
+                conteudo.push_str(&format!("• {}\n", nome_linha));
+            }
+            
+            conteudo.push_str(&format!("\n🔗 Total de conexões diretas: {}\n\n", conexoes.len()));
+            
+            // Mostrar algumas conexões diretas
+            conteudo.push_str("🚉 ESTAÇÕES CONECTADAS:\n");
+            let mut conexoes_mostradas = 0;
+            for conexao in conexoes.iter().take(5) { // Mostrar apenas as primeiras 5
+                let estacao_destino = &grafo.estacoes[conexao.para_estacao];
+                conteudo.push_str(&format!("• {} ({:.1} min)\n", estacao_destino.nome, conexao.tempo_minutos));
+                conexoes_mostradas += 1;
+            }
+            
+            if conexoes.len() > 5 {
+                conteudo.push_str(&format!("• ... e mais {} conexões\n", conexoes.len() - 5));
+            }
+        }
+        
+        conteudo.push_str("\n💡 Use os controles do painel lateral para\n   selecionar início e destino");
         
         let popup = PopupInfo {
             id_estacao,
             conteudo,
-            posicao: RefCell::new(Vec2::new(30.0, -30.0)),
+            posicao: RefCell::new(Vec2::new(50.0, -40.0)),
             visivel: true,
             esta_sendo_arrastado: false,
-            tamanho: Vec2::new(200.0, 100.0),
+            tamanho: Vec2::new(300.0, 200.0),
         };
         
         self.popups_info.insert(id_estacao, popup);
     }
 
     fn desenhar_popups(&mut self, ui: &mut egui::Ui, rect_desenho: egui::Rect, _grafo: &GrafoMetro) -> Vec<AcaoPopup> {
-        // Exemplo de popup simples para cada estação visível
+        // Desenha popups persistentes com informações detalhadas das estações
         let mut acoes = Vec::new();
         for (id, popup) in self.popups_info.iter_mut() {
             if popup.visivel {
-                let pos = self.posicoes_estacoes_tela[*id] * self.zoom_nivel + self.offset_rolagem + rect_desenho.min.to_vec2();
-                let _area = egui::Area::new(Id::new(format!("popup_{}", id)))
-                    .fixed_pos(pos + Vec2::new(30.0, -30.0))
+                let pos_estacao = self.posicoes_estacoes_tela[*id] * self.zoom_nivel + self.offset_rolagem + rect_desenho.min.to_vec2();
+                let offset_popup = *popup.posicao.borrow();
+                let pos_popup = pos_estacao + offset_popup;
+                
+                let _area = egui::Area::new(Id::new(format!("popup_persistente_{}", id)))
+                    .fixed_pos(pos_popup)
+                    .order(egui::Order::Foreground)
+                    .constrain(true)
                     .show(ui.ctx(), |ui| {
-                        ui.group(|ui| {
-                            ui.label(&popup.conteudo);
-                            if ui.button("Fechar").clicked() {
-                                acoes.push(AcaoPopup { id_estacao: *id, tipo: TipoAcaoPopup::Fechar, delta: None });
-                            }
-                        });
+                        // Frame customizado para o popup persistente
+                        egui::Frame::popup(ui.style())
+                            .fill(egui::Color32::from_rgba_premultiplied(25, 30, 40, 250))
+                            .stroke(egui::Stroke::new(2.0, egui::Color32::from_rgb(120, 150, 200)))
+                            .corner_radius(8.0)
+                            .inner_margin(egui::Margin::same(12))
+                            .show(ui, |ui| {
+                                ui.set_max_width(320.0);
+                                ui.set_min_width(280.0);
+                                
+                                // Cabeçalho do popup com botão de fechar
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("📋")
+                                        .size(16.0)
+                                        .color(egui::Color32::from_rgb(120, 150, 200)));
+                                    ui.label(egui::RichText::new("Detalhes da Estação")
+                                        .size(14.0)
+                                        .color(egui::Color32::from_rgb(120, 150, 200))
+                                        .strong());
+                                    
+                                    // Botão de fechar no canto direito
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                        if ui.button(egui::RichText::new("✕")
+                                            .size(12.0)
+                                            .color(egui::Color32::from_rgb(255, 100, 100)))
+                                            .clicked() {
+                                            acoes.push(AcaoPopup { 
+                                                id_estacao: *id, 
+                                                tipo: TipoAcaoPopup::Fechar, 
+                                                delta: None 
+                                            });
+                                        }
+                                    });
+                                });
+                                
+                                ui.separator();
+                                
+                                // Conteúdo do popup em scroll area
+                                egui::ScrollArea::vertical()
+                                    .max_height(300.0)
+                                    .show(ui, |ui| {
+                                        // Dividir o conteúdo em linhas e formatar adequadamente
+                                        for linha in popup.conteudo.lines() {
+                                            if linha.trim().is_empty() {
+                                                ui.add_space(4.0);
+                                            } else if linha.starts_with("📍") || linha.starts_with("🆔") {
+                                                // Títulos principais
+                                                ui.label(egui::RichText::new(linha)
+                                                    .size(13.0)
+                                                    .color(egui::Color32::WHITE)
+                                                    .strong());
+                                            } else if linha.contains("Status:") {
+                                                // Status da estação
+                                                let cor = if linha.contains("INÍCIO") {
+                                                    egui::Color32::from_rgb(100, 255, 100)
+                                                } else if linha.contains("DESTINO") {
+                                                    egui::Color32::from_rgb(255, 100, 100)
+                                                } else if linha.contains("ROTA ENCONTRADA") {
+                                                    egui::Color32::from_rgb(100, 255, 150)
+                                                } else if linha.contains("EXPLORADA") {
+                                                    egui::Color32::from_rgb(150, 200, 255)
+                                                } else {
+                                                    egui::Color32::from_rgb(180, 180, 180)
+                                                };
+                                                ui.label(egui::RichText::new(linha)
+                                                    .size(12.0)
+                                                    .color(cor)
+                                                    .strong());
+                                            } else if linha.contains("CONEXÕES DISPONÍVEIS") || linha.contains("ESTAÇÕES CONECTADAS") {
+                                                // Seções principais
+                                                ui.add_space(6.0);
+                                                ui.label(egui::RichText::new(linha)
+                                                    .size(12.0)
+                                                    .color(egui::Color32::from_rgb(150, 200, 255))
+                                                    .strong());
+                                            } else if linha.starts_with("• Linha") {
+                                                // Linhas do metrô com cores
+                                                let cor = if linha.contains("Azul") {
+                                                    egui::Color32::from_rgb(0, 120, 255)
+                                                } else if linha.contains("Amarela") {
+                                                    egui::Color32::from_rgb(255, 215, 0)
+                                                } else if linha.contains("Vermelha") {
+                                                    egui::Color32::RED
+                                                } else if linha.contains("Verde") {
+                                                    egui::Color32::from_rgb(0, 180, 0)
+                                                } else {
+                                                    egui::Color32::GRAY
+                                                };
+                                                ui.label(egui::RichText::new(linha)
+                                                    .size(11.0)
+                                                    .color(cor));
+                                            } else if linha.starts_with("• ") && linha.contains("min") {
+                                                // Conexões com tempo
+                                                ui.label(egui::RichText::new(linha)
+                                                    .size(10.0)
+                                                    .color(egui::Color32::from_rgb(200, 200, 200)));
+                                            } else if linha.starts_with("🔗") || linha.starts_with("💡") {
+                                                // Informações adicionais
+                                                ui.label(egui::RichText::new(linha)
+                                                    .size(10.0)
+                                                    .color(egui::Color32::from_rgb(180, 180, 180)));
+                                            } else {
+                                                // Texto normal
+                                                ui.label(egui::RichText::new(linha)
+                                                    .size(10.0)
+                                                    .color(egui::Color32::from_rgb(220, 220, 220)));
+                                            }
+                                        }
+                                    });
+                                
+                                ui.add_space(6.0);
+                                ui.separator();
+                                
+                                // Rodapé com dica
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("💡")
+                                        .size(12.0)
+                                        .color(egui::Color32::from_rgb(150, 150, 150)));
+                                    ui.label(egui::RichText::new("Arraste este popup para movê-lo")
+                                        .size(9.0)
+                                        .color(egui::Color32::from_rgb(150, 150, 150))
+                                        .italics());
+                                });
+                            });
                     });
             }
         }
@@ -1365,6 +1640,10 @@ impl eframe::App for MinhaAplicacaoGUI {
                 ui.separator();
                 if ui.button("Iniciar/Reiniciar Busca").clicked() {
                     self.iniciar_busca_a_estrela();
+                }
+                if ui.button("Limpar Tudo").clicked() {
+                    self.limpar_estado_visual();
+                    self.mensagem_status_ui = "Estado limpo. Selecione início/fim e inicie nova busca.".to_string();
                 }
                 if self.solucionador_a_estrela.is_some() {
                     if ui.button("Próximo Passo").clicked() {
@@ -1517,12 +1796,10 @@ impl eframe::App for MinhaAplicacaoGUI {
         egui::CentralPanel::default().show(ctx, |ui| {
             let tamanho_disponivel = ui.available_size();
 
-            static mut JA_CENTRALIZOU: bool = false;
-            unsafe {
-                if !JA_CENTRALIZOU {
-                    self.centralizar_visualizacao(tamanho_disponivel);
-                    JA_CENTRALIZOU = true;
-                }
+            // Centralização segura sem unsafe
+            if !self.ja_centralizou {
+                self.centralizar_visualizacao(tamanho_disponivel);
+                self.ja_centralizou = true;
             }
 
             egui::Frame::canvas(ui.style()).show(ui, |ui| {
@@ -1578,10 +1855,14 @@ impl eframe::App for MinhaAplicacaoGUI {
                 
                 // Desenhar marcadores visuais acima das estações
                 self.desenhar_marcadores_estacoes(&painter, rect_desenho, grafo_ref, ui);
+                
+                // Desenhar popups persistentes e processar suas ações
+                let acoes_popup = self.desenhar_popups(ui, rect_desenho, grafo_ref);
+                self.processar_acoes_popup(acoes_popup);
             });
 
             // Controle de repaint mais rigoroso para evitar piscamento
-            let precisa_repaint = self.solucionador_a_estrela.is_some() || !self.vizinhos_sendo_analisados.is_empty();
+            let precisa_repaint = self.solucionador_a_estrela.is_some() || !self.vizinhos_sendo_analisados_ui.is_empty();
             if precisa_repaint {
                 let tempo = ctx.input(|i| i.time) as f32;
                 if tempo - self.ultimo_tempo_animacao > 0.16 { // ~60 FPS máximo
