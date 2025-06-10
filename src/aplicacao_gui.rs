@@ -759,62 +759,144 @@ impl MinhaAplicacaoGUI {
                                     
                                     ui.add_space(8.0);
                                     
-                                    // Valores do algoritmo A* com explicações
-                                    ui.label(egui::RichText::new("📊 Valores do Algoritmo A*:")
-                                        .size(12.0)
-                                        .color(egui::Color32::from_rgb(150, 200, 255))
+                                    // Valores do algoritmo A* com explicações - DESTAQUE PRINCIPAL
+                                    ui.add_space(8.0);
+                                    ui.label(egui::RichText::new("🎯 VALORES FUNDAMENTAIS DO A*")
+                                        .size(14.0)
+                                        .color(egui::Color32::from_rgb(255, 215, 0))
                                         .strong());
                                     
-                                    // Exibir valores em um formato mais claro
-                                    ui.group(|ui| {
-                                        if let Some(f) = valor_f {
-                                            ui.horizontal(|ui| {
-                                                ui.label(egui::RichText::new("f =")
-                                                    .size(11.0)
-                                                    .color(egui::Color32::from_rgb(255, 220, 150))
-                                                    .strong());
-                                                ui.label(egui::RichText::new(format!("{:.1} min", f))
-                                                    .size(11.0)
-                                                    .color(egui::Color32::WHITE));
-                                                ui.label(egui::RichText::new("(custo total estimado = g + h)")
-                                                    .size(9.0)
-                                                    .color(egui::Color32::from_rgb(180, 180, 180))
-                                                    .italics());
-                                            });
-                                        }
-                                        
-                                        if let Some(g) = valor_g {
-                                            ui.horizontal(|ui| {
-                                                ui.label(egui::RichText::new("g =")
-                                                    .size(11.0)
-                                                    .color(egui::Color32::from_rgb(150, 255, 150))
-                                                    .strong());
-                                                ui.label(egui::RichText::new(format!("{:.1} min", g))
-                                                    .size(11.0)
-                                                    .color(egui::Color32::WHITE));
-                                                ui.label(egui::RichText::new("(tempo real viajado até aqui)")
-                                                    .size(9.0)
-                                                    .color(egui::Color32::from_rgb(180, 180, 180))
-                                                    .italics());
-                                            });
-                                        }
-                                        
-                                        if let Some(h) = valor_h {
-                                            ui.horizontal(|ui| {
-                                                ui.label(egui::RichText::new("h =")
-                                                    .size(11.0)
-                                                    .color(egui::Color32::from_rgb(255, 150, 150))
-                                                    .strong());
-                                                ui.label(egui::RichText::new(format!("{:.1} min", h))
-                                                    .size(11.0)
-                                                    .color(egui::Color32::WHITE));
-                                                ui.label(egui::RichText::new("(estimativa tempo até destino)")
-                                                    .size(9.0)
-                                                    .color(egui::Color32::from_rgb(180, 180, 180))
-                                                    .italics());
-                                            });
-                                        }
-                                    });
+                                    // Frame destacado para os valores principais
+                                    egui::Frame::group(ui.style())
+                                        .fill(egui::Color32::from_rgba_premultiplied(50, 50, 70, 200))
+                                        .stroke(egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 215, 0)))
+                                        .corner_radius(6.0)
+                                        .inner_margin(egui::Margin::same(10))
+                                        .show(ui, |ui| {
+                                            // Exibir valores em formato mais destacado e claro - Ordem: H, G, F
+                                            if let Some(h) = valor_h {
+                                                ui.horizontal(|ui| {
+                                                    ui.label(egui::RichText::new("H")
+                                                        .size(16.0)
+                                                        .color(egui::Color32::from_rgb(255, 150, 150))
+                                                        .strong());
+                                                    ui.label(egui::RichText::new("=")
+                                                        .size(14.0)
+                                                        .color(egui::Color32::WHITE));
+                                                    ui.label(egui::RichText::new(format!("{:.1} min", h))
+                                                        .size(16.0)
+                                                        .color(egui::Color32::WHITE)
+                                                        .strong());
+                                                    ui.separator();
+                                                    ui.label(egui::RichText::new("Estimativa até Destino")
+                                                        .size(11.0)
+                                                        .color(egui::Color32::from_rgb(200, 200, 200)));
+                                                });
+                                                ui.add_space(2.0);
+                                            }
+                                            
+                                            if let Some(g) = valor_g {
+                                                ui.horizontal(|ui| {
+                                                    ui.label(egui::RichText::new("G")
+                                                        .size(16.0)
+                                                        .color(egui::Color32::from_rgb(150, 255, 150))
+                                                        .strong());
+                                                    ui.label(egui::RichText::new("=")
+                                                        .size(14.0)
+                                                        .color(egui::Color32::WHITE));
+                                                    ui.label(egui::RichText::new(format!("{:.1} min", g))
+                                                        .size(16.0)
+                                                        .color(egui::Color32::WHITE)
+                                                        .strong());
+                                                    ui.separator();
+                                                    ui.label(egui::RichText::new("Tempo Real Percorrido")
+                                                        .size(11.0)
+                                                        .color(egui::Color32::from_rgb(200, 200, 200)));
+                                                });
+                                                ui.add_space(2.0);
+                                            }
+                                            
+                                            if let Some(f) = valor_f {
+                                                ui.horizontal(|ui| {
+                                                    ui.label(egui::RichText::new("F")
+                                                        .size(16.0)
+                                                        .color(egui::Color32::from_rgb(255, 220, 150))
+                                                        .strong());
+                                                    ui.label(egui::RichText::new("=")
+                                                        .size(14.0)
+                                                        .color(egui::Color32::WHITE));
+                                                    ui.label(egui::RichText::new(format!("{:.1} min", f))
+                                                        .size(16.0)
+                                                        .color(egui::Color32::WHITE)
+                                                        .strong());
+                                                    ui.separator();
+                                                    ui.label(egui::RichText::new("Custo Total Estimado")
+                                                        .size(11.0)
+                                                        .color(egui::Color32::from_rgb(200, 200, 200)));
+                                                });
+                                            }
+                                            
+                                            // Mostrar a fórmula visual
+                                            if valor_f.is_some() && valor_g.is_some() && valor_h.is_some() {
+                                                ui.add_space(8.0);
+                                                ui.separator();
+                                                ui.add_space(4.0);
+                                                
+                                                // Fórmula visual destacada
+                                                ui.horizontal(|ui| {
+                                                    ui.label(egui::RichText::new("💡 Fórmula:")
+                                                        .size(12.0)
+                                                        .color(egui::Color32::from_rgb(255, 215, 0))
+                                                        .strong());
+                                                    ui.label(egui::RichText::new("F")
+                                                        .size(14.0)
+                                                        .color(egui::Color32::from_rgb(255, 220, 150))
+                                                        .strong());
+                                                    ui.label(egui::RichText::new("=")
+                                                        .size(12.0)
+                                                        .color(egui::Color32::WHITE));
+                                                    ui.label(egui::RichText::new("G")
+                                                        .size(14.0)
+                                                        .color(egui::Color32::from_rgb(150, 255, 150))
+                                                        .strong());
+                                                    ui.label(egui::RichText::new("+")
+                                                        .size(12.0)
+                                                        .color(egui::Color32::WHITE));
+                                                    ui.label(egui::RichText::new("H")
+                                                        .size(14.0)
+                                                        .color(egui::Color32::from_rgb(255, 150, 150))
+                                                        .strong());
+                                                });
+                                                
+                                                ui.horizontal(|ui| {
+                                                    let f_val = valor_f.unwrap();
+                                                    let g_val = valor_g.unwrap();
+                                                    let h_val = valor_h.unwrap();
+                                                    
+                                                    ui.label(egui::RichText::new("🔢 Valores:")
+                                                        .size(11.0)
+                                                        .color(egui::Color32::from_rgb(200, 200, 200)));
+                                                    ui.label(egui::RichText::new(format!("{:.1}", f_val))
+                                                        .size(12.0)
+                                                        .color(egui::Color32::from_rgb(255, 220, 150))
+                                                        .strong());
+                                                    ui.label(egui::RichText::new("=")
+                                                        .size(10.0)
+                                                        .color(egui::Color32::WHITE));
+                                                    ui.label(egui::RichText::new(format!("{:.1}", g_val))
+                                                        .size(12.0)
+                                                        .color(egui::Color32::from_rgb(150, 255, 150))
+                                                        .strong());
+                                                    ui.label(egui::RichText::new("+")
+                                                        .size(10.0)
+                                                        .color(egui::Color32::WHITE));
+                                                    ui.label(egui::RichText::new(format!("{:.1}", h_val))
+                                                        .size(12.0)
+                                                        .color(egui::Color32::from_rgb(255, 150, 150))
+                                                        .strong());
+                                                });
+                                            }
+                                        });
                                     
                                     // Mostrar interpretação dos valores se todos estiverem disponíveis
                                     if valor_f.is_some() && valor_g.is_some() && valor_h.is_some() {
@@ -990,6 +1072,100 @@ impl MinhaAplicacaoGUI {
                         
                         ui.add_space(6.0);
                         
+                        // Verificar se há informações A* disponíveis para esta estação
+                        let mut valores_a_star_encontrados = false;
+                        if let Some(ref solucionador) = self.solucionador_a_estrela {
+                            if let Some(ref analise) = solucionador.ultima_analise {
+                                // Procurar informações desta estação na análise atual
+                                for vizinho_info in &analise.vizinhos_analisados {
+                                    if vizinho_info.starts_with(&format!("E{}", id_estacao + 1)) {
+                                        let (valor_f, valor_g, valor_h) = self.extrair_valores_fgh(vizinho_info);
+                                        
+                                        if valor_f.is_some() || valor_g.is_some() || valor_h.is_some() {
+                                            valores_a_star_encontrados = true;
+                                            
+                                            ui.label(egui::RichText::new("🎯 VALORES A* DISPONÍVEIS")
+                                                .size(13.0)
+                                                .color(egui::Color32::from_rgb(255, 215, 0))
+                                                .strong());
+                                            
+                                            egui::Frame::group(ui.style())
+                                                .fill(egui::Color32::from_rgba_premultiplied(40, 40, 60, 200))
+                                                .stroke(egui::Stroke::new(1.5, egui::Color32::from_rgb(255, 215, 0)))
+                                                .corner_radius(4.0)
+                                                .inner_margin(egui::Margin::same(8))
+                                                .show(ui, |ui| {
+                                                    // Ordem: H, G, F
+                                                    if let Some(h) = valor_h {
+                                                        ui.horizontal(|ui| {
+                                                            ui.label(egui::RichText::new("H")
+                                                                .size(14.0)
+                                                                .color(egui::Color32::from_rgb(255, 150, 150))
+                                                                .strong());
+                                                            ui.label(egui::RichText::new("=")
+                                                                .size(12.0)
+                                                                .color(egui::Color32::WHITE));
+                                                            ui.label(egui::RichText::new(format!("{:.1} min", h))
+                                                                .size(14.0)
+                                                                .color(egui::Color32::WHITE)
+                                                                .strong());
+                                                            ui.label(egui::RichText::new("(Estimativa)")
+                                                                .size(10.0)
+                                                                .color(egui::Color32::from_rgb(180, 180, 180)));
+                                                        });
+                                                    }
+                                                    
+                                                    if let Some(g) = valor_g {
+                                                        ui.horizontal(|ui| {
+                                                            ui.label(egui::RichText::new("G")
+                                                                .size(14.0)
+                                                                .color(egui::Color32::from_rgb(150, 255, 150))
+                                                                .strong());
+                                                            ui.label(egui::RichText::new("=")
+                                                                .size(12.0)
+                                                                .color(egui::Color32::WHITE));
+                                                            ui.label(egui::RichText::new(format!("{:.1} min", g))
+                                                                .size(14.0)
+                                                                .color(egui::Color32::WHITE)
+                                                                .strong());
+                                                            ui.label(egui::RichText::new("(Percorrido)")
+                                                                .size(10.0)
+                                                                .color(egui::Color32::from_rgb(180, 180, 180)));
+                                                        });
+                                                    }
+                                                    
+                                                    if let Some(f) = valor_f {
+                                                        ui.horizontal(|ui| {
+                                                            ui.label(egui::RichText::new("F")
+                                                                .size(14.0)
+                                                                .color(egui::Color32::from_rgb(255, 220, 150))
+                                                                .strong());
+                                                            ui.label(egui::RichText::new("=")
+                                                                .size(12.0)
+                                                                .color(egui::Color32::WHITE));
+                                                            ui.label(egui::RichText::new(format!("{:.1} min", f))
+                                                                .size(14.0)
+                                                                .color(egui::Color32::WHITE)
+                                                                .strong());
+                                                            ui.label(egui::RichText::new("(Total)")
+                                                                .size(10.0)
+                                                                .color(egui::Color32::from_rgb(180, 180, 180)));
+                                                        });
+                                                    }
+                                                });
+                                            
+                                            ui.add_space(4.0);
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if !valores_a_star_encontrados {
+                            ui.add_space(6.0);
+                        }
+                        
                         // Status atual da estação
                         if id_estacao == self.id_estacao_inicio_selecionada {
                             ui.label(egui::RichText::new("🏁 Estação de INÍCIO")
@@ -1069,20 +1245,41 @@ impl MinhaAplicacaoGUI {
         let mut valor_g = None;
         let mut valor_h = None;
         
-        // Parsear a string para extrair os valores f=X, g=Y, h=Z
-        for parte in info.split(", ") {
-            let parte = parte.trim();
-            if parte.starts_with("f=") {
-                if let Ok(val) = parte[2..].parse::<f32>() {
-                    valor_f = Some(val);
-                }
-            } else if parte.starts_with("g=") {
-                if let Ok(val) = parte[2..].parse::<f32>() {
-                    valor_g = Some(val);
-                }
-            } else if parte.starts_with("h=") {
-                if let Ok(val) = parte[2..].parse::<f32>() {
-                    valor_h = Some(val);
+        // Parsear a string no formato: "E{id}: g={value}, h={value}, f={value} - ADICIONADO"
+        // Primeiro, encontrar onde começam os valores após ':'
+        if let Some(pos_dois_pontos) = info.find(':') {
+            let valores_parte = &info[pos_dois_pontos + 1..];
+            
+            // Dividir por vírgulas e processar cada parte
+            for parte in valores_parte.split(',') {
+                let parte = parte.trim();
+                
+                // Verificar se contém "g=", "h=" ou "f="
+                if let Some(pos_g) = parte.find("g=") {
+                    let valor_str = &parte[pos_g + 2..];
+                    // Extrair apenas os dígitos e ponto decimal
+                    let valor_limpo = valor_str.chars()
+                        .take_while(|c| c.is_ascii_digit() || *c == '.')
+                        .collect::<String>();
+                    if let Ok(val) = valor_limpo.parse::<f32>() {
+                        valor_g = Some(val);
+                    }
+                } else if let Some(pos_h) = parte.find("h=") {
+                    let valor_str = &parte[pos_h + 2..];
+                    let valor_limpo = valor_str.chars()
+                        .take_while(|c| c.is_ascii_digit() || *c == '.')
+                        .collect::<String>();
+                    if let Ok(val) = valor_limpo.parse::<f32>() {
+                        valor_h = Some(val);
+                    }
+                } else if let Some(pos_f) = parte.find("f=") {
+                    let valor_str = &parte[pos_f + 2..];
+                    let valor_limpo = valor_str.chars()
+                        .take_while(|c| c.is_ascii_digit() || *c == '.')
+                        .collect::<String>();
+                    if let Ok(val) = valor_limpo.parse::<f32>() {
+                        valor_f = Some(val);
+                    }
                 }
             }
         }
@@ -1486,22 +1683,43 @@ impl MinhaAplicacaoGUI {
                                 ui.set_max_width(320.0);
                                 ui.set_min_width(280.0);
                                 
-                                // Cabeçalho do popup com botão de fechar
-                                ui.horizontal(|ui| {
+                                // Cabeçalho do popup com título arrastável e botão de fechar melhorado
+                                let _header_response = ui.horizontal(|ui| {
                                     ui.label(egui::RichText::new("📋")
                                         .size(16.0)
                                         .color(egui::Color32::from_rgb(120, 150, 200)));
-                                    ui.label(egui::RichText::new("Detalhes da Estação")
-                                        .size(14.0)
-                                        .color(egui::Color32::from_rgb(120, 150, 200))
-                                        .strong());
                                     
-                                    // Botão de fechar no canto direito
+                                    // Título que serve como área de arrasto
+                                    let title_response = ui.add(egui::Label::new(
+                                        egui::RichText::new("Detalhes da Estação")
+                                            .size(14.0)
+                                            .color(egui::Color32::from_rgb(120, 150, 200))
+                                            .strong()
+                                    ).sense(egui::Sense::drag()));
+                                    
+                                    // Detectar arrasto no título
+                                    if title_response.dragged() {
+                                        acoes.push(AcaoPopup { 
+                                            id_estacao: *id, 
+                                            tipo: TipoAcaoPopup::MoverDelta, 
+                                            delta: Some(title_response.drag_delta()) 
+                                        });
+                                    }
+                                    
+                                    // Botão de fechar melhorado no canto direito
                                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        if ui.button(egui::RichText::new("✕")
-                                            .size(12.0)
-                                            .color(egui::Color32::from_rgb(255, 100, 100)))
-                                            .clicked() {
+                                        // Botão X mais visível e elegante
+                                        let close_button = egui::Button::new(
+                                            egui::RichText::new("✖")
+                                                .size(14.0)
+                                                .color(egui::Color32::WHITE)
+                                        )
+                                        .fill(egui::Color32::from_rgb(180, 50, 50))
+                                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(220, 80, 80)))
+                                        .corner_radius(4.0)
+                                        .min_size(egui::Vec2::new(24.0, 24.0));
+                                        
+                                        if ui.add(close_button).clicked() {
                                             acoes.push(AcaoPopup { 
                                                 id_estacao: *id, 
                                                 tipo: TipoAcaoPopup::Fechar, 
@@ -1509,7 +1727,15 @@ impl MinhaAplicacaoGUI {
                                             });
                                         }
                                     });
+                                    
+                                    title_response
                                 });
+                                
+                                // Dica visual de que pode ser arrastado
+                                ui.label(egui::RichText::new("🖱️ Arraste o título para mover o popup")
+                                    .size(9.0)
+                                    .color(egui::Color32::from_rgb(150, 150, 150))
+                                    .italics());
                                 
                                 ui.separator();
                                 
