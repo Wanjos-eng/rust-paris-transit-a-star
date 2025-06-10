@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 pub const NUMERO_ESTACOES: usize = 14;
-pub const VELOCIDADE_TREM_KMH: f32 = 30.0 / 2.0; // Adjusted to match expected timing (in C++ time = distance * 2)
+pub const VELOCIDADE_TREM_KMH: f32 = 30.0 / 2.0; // Ajustado para corresponder ao tempo esperado (em C++ tempo = distância * 2)
 pub const TEMPO_BALDEACAO_MINUTOS: f32 = 4.0; // Esta constante será usada no algoritmo_a_estrela.rs
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -79,6 +79,6 @@ impl GrafoMetro {
 
     pub fn obter_tempo_heuristico_minutos(&self, de_estacao: IdEstacao, para_estacao: IdEstacao) -> Option<f32> {
         self.distancias_heuristicas_km[de_estacao][para_estacao]
-            .map(|dist_km| dist_km * 2.0) // Direto para minutos, conforme o código C++
+            .map(|dist_km| dist_km * 2.0) // Direto para minutos, conforme o código
     }
 }

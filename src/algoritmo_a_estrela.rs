@@ -454,16 +454,16 @@ impl SolucionadorAEstrela {
         }
     }
 
-    // Debugging helper to print the current frontier
+    // Função auxiliar para depuração da fronteira atual
     pub fn debug_print_fronteira(&self) {
         println!("\nFRONTEIRA ATUAL (ordenada por f-cost crescente):");
         
-        // Sort nodes by f-cost to understand the algorithm's decisions
+        // Ordena nós por f-cost para entender as decisões do algoritmo
         let mut nodes: Vec<_> = self.fronteira.iter().collect();
         nodes.sort_by(|a, b| a.custo_f.partial_cmp(&b.custo_f)
             .unwrap_or(Ordering::Equal));
         
-        for (idx, node) in nodes.iter().enumerate().take(10) {  // Show just top 10 entries
+        for (idx, node) in nodes.iter().enumerate().take(10) {  // Mostra apenas os 10 melhores
             let caminho_str = node.caminho.iter()
                 .map(|&id| format!("E{}", id+1))
                 .collect::<Vec<_>>()
@@ -484,10 +484,10 @@ impl SolucionadorAEstrela {
         println!();
     }
 
-    // Special method to verify the direct path
+    // Método especial para verificar o caminho direto
     pub fn check_direct_path(&self) {
         println!("\nVERIFICANDO CAMINHO DIRETO E6 -> E5 -> E4 -> E13:");
-        let path = vec![5, 4, 3, 12]; // E6->E5->E4->E13 (zero-based indices)
+        let path = vec![5, 4, 3, 12]; // E6->E5->E4->E13 (índices base-zero)
         let mut total_time = 0.0;
         let mut transfers = 0;
         let mut last_line: Option<CorLinha> = None;
