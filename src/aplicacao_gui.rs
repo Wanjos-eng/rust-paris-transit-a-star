@@ -898,48 +898,7 @@ impl MinhaAplicacaoGUI {
                                             }
                                         });
                                     
-                                    // Mostrar interpretação dos valores se todos estiverem disponíveis
-                                    if valor_f.is_some() && valor_g.is_some() && valor_h.is_some() {
-                                        ui.add_space(6.0);
-                                        ui.label(egui::RichText::new("🧮 Interpretação:")
-                                            .size(12.0)
-                                            .color(egui::Color32::from_rgb(150, 200, 255))
-                                            .strong());
-                                        
-                                        ui.group(|ui| {
-                                            let f_val = valor_f.unwrap();
-                                            let g_val = valor_g.unwrap();
-                                            let h_val = valor_h.unwrap();
-                                            
-                                            ui.label(egui::RichText::new(format!(
-                                                "✓ Confirmação: {:.1} = {:.1} + {:.1}",
-                                                f_val, g_val, h_val
-                                            ))
-                                                .size(10.0)
-                                                .color(egui::Color32::from_rgb(150, 255, 150)));
-                                            
-                                            if g_val > h_val {
-                                                ui.label(egui::RichText::new("📍 Já percorreu mais tempo que o estimado restante")
-                                                    .size(9.0)
-                                                    .color(egui::Color32::from_rgb(255, 200, 100)));
-                                            } else {
-                                                ui.label(egui::RichText::new("🚀 Ainda há um bom trecho pela frente")
-                                                    .size(9.0)
-                                                    .color(egui::Color32::from_rgb(100, 200, 255)));
-                                            }
-                                            
-                                            // Mostrar a porcentagem do progresso
-                                            let progresso = (g_val / f_val * 100.0).min(100.0);
-                                            ui.label(egui::RichText::new(format!(
-                                                "📊 Progresso estimado: {:.0}% do caminho total",
-                                                progresso
-                                            ))
-                                                .size(9.0)
-                                                .color(egui::Color32::from_rgb(200, 200, 200)));
-                                        });
-                                    }
-                                    
-                                    ui.add_space(6.0);
+                                    ui.add_space(8.0);
                                     
                                     // Informações de conectividade
                                     if let Some(conexoes) = grafo.lista_adjacencia.get(id_estacao) {
@@ -969,48 +928,6 @@ impl MinhaAplicacaoGUI {
                                             }
                                         });
                                     }
-                                    
-                                    ui.add_space(6.0);
-                                    
-                                    // Explicação do algoritmo A*
-                                    ui.collapsing("ℹ️ Como funciona o A*", |ui| {
-                                        ui.label(egui::RichText::new("📝 Fórmula: f = g + h")
-                                            .size(10.0)
-                                            .color(egui::Color32::from_rgb(255, 220, 150))
-                                            .strong());
-                                        ui.add_space(4.0);
-                                        
-                                        ui.label(egui::RichText::new("🟢 g = Custo real acumulado desde o início")
-                                            .size(9.0)
-                                            .color(egui::Color32::from_rgb(150, 255, 150)));
-                                        ui.label(egui::RichText::new("   Tempo total viajado até esta estação")
-                                            .size(8.0)
-                                            .color(egui::Color32::from_rgb(180, 180, 180)));
-                                        ui.add_space(2.0);
-                                        
-                                        ui.label(egui::RichText::new("🔴 h = Heurística (estimativa otimista)")
-                                            .size(9.0)
-                                            .color(egui::Color32::from_rgb(255, 150, 150)));
-                                        ui.label(egui::RichText::new("   Estimativa do tempo até o destino")
-                                            .size(8.0)
-                                            .color(egui::Color32::from_rgb(180, 180, 180)));
-                                        ui.add_space(2.0);
-                                        
-                                        ui.label(egui::RichText::new("🟡 f = Prioridade total na busca")
-                                            .size(9.0)
-                                            .color(egui::Color32::from_rgb(255, 220, 150)));
-                                        ui.label(egui::RichText::new("   O A* sempre expande o nó com menor f")
-                                            .size(8.0)
-                                            .color(egui::Color32::from_rgb(180, 180, 180)));
-                                        ui.add_space(4.0);
-                                        
-                                        ui.label(egui::RichText::new("🎯 Objetivo: Encontrar o caminho mais rápido!")
-                                            .size(9.0)
-                                            .color(egui::Color32::from_rgb(150, 200, 255))
-                                            .strong());
-                                    });
-                                    
-                                    ui.add_space(4.0);
                                     
                                     // Dica de interação
                                     ui.separator();
