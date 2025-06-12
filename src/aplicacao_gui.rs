@@ -166,6 +166,9 @@ impl MinhaAplicacaoGUI {
 
     fn executar_proximo_passo_a_estrela(&mut self) {
         if let Some(ref mut solucionador) = self.solucionador_a_estrela {
+            // Atualizar animações primeiro
+            solucionador.atualizar_animacoes(self.ultimo_tempo_animacao);
+            
             match solucionador.proximo_passo() {
                 crate::algoritmo_a_estrela::ResultadoPassoAEstrela::EmProgresso => {
                     // Atualizar a visualização com base na análise atual
@@ -173,7 +176,8 @@ impl MinhaAplicacaoGUI {
                         // A estação que foi expandida (retirada da fronteira e analisada)
                         self.estacao_sendo_expandida_ui = Some(analise.estacao_expandida);
                         
-                        // Adicionar a estação expandida ao conjunto de exploradas
+                        // SEMPRE adicionar às exploradas se não for brick wall
+                        // Estações brick wall são adicionadas aqui também para manter a lógica consistente
                         self.estacoes_exploradas_ui.insert(analise.estacao_expandida);
                         
                         // Extrair os vizinhos que estão sendo analisados
@@ -187,8 +191,9 @@ impl MinhaAplicacaoGUI {
                                         if let Ok(id_estacao_um_baseado) = numero_str.parse::<usize>() {
                                             if id_estacao_um_baseado > 0 {
                                                 let id_estacao = id_estacao_um_baseado - 1; // Converter para zero-based
-                                                // Só adicionar se não foi explorado ainda
-                                                if !self.estacoes_exploradas_ui.contains(&id_estacao) {
+                                                // Só adicionar se não foi explorado ainda e não é brick wall
+                                                if !self.estacoes_exploradas_ui.contains(&id_estacao) &&
+                                                   !solucionador.e_brick_wall(id_estacao) {
                                                     self.vizinhos_sendo_analisados_ui.insert(id_estacao);
                                                 }
                                             }
@@ -207,12 +212,21 @@ impl MinhaAplicacaoGUI {
                             "Desconhecida"
                         };
                         
-                        self.mensagem_status_ui = format!(
-                            "Expandindo estação: {} (E{}) - {} vizinhos analisados",
-                            nome_estacao,
-                            analise.estacao_expandida + 1,
-                            self.vizinhos_sendo_analisados_ui.len()
-                        );
+                        // Mensagem diferente se for brick wall
+                        if solucionador.e_brick_wall(analise.estacao_expandida) {
+                            self.mensagem_status_ui = format!(
+                                "🧱 BRICK WALL: {} (E{}) - Beco sem saída detectado!",
+                                nome_estacao,
+                                analise.estacao_expandida + 1
+                            );
+                        } else {
+                            self.mensagem_status_ui = format!(
+                                "Expandindo estação: {} (E{}) - {} vizinhos analisados",
+                                nome_estacao,
+                                analise.estacao_expandida + 1,
+                                self.vizinhos_sendo_analisados_ui.len()
+                            );
+                        }
                     } else {
                         self.mensagem_status_ui = "Passo em progresso, mas sem detalhes da análise.".to_string();
                     }
@@ -1083,30 +1097,105 @@ impl MinhaAplicacaoGUI {
                             ui.add_space(6.0);
                         }
                         
-                        // Status atual da estação
+                        // Status atual da estação com explicações didáticas detalhadas
                         if id_estacao == self.id_estacao_inicio_selecionada {
-                            ui.label(egui::RichText::new("Estação de INÍCIO")
-                                .size(12.0)
+                            ui.label(egui::RichText::new("🚉 ESTAÇÃO DE INÍCIO")
+                                .size(13.0)
                                 .color(egui::Color32::from_rgb(100, 255, 100))
                                 .strong());
+                            ui.label(egui::RichText::new("Esta é a estação onde começamos nossa busca.\nTodas as rotas calculadas partem daqui.")
+                                .size(10.0)
+                                .color(egui::Color32::from_rgb(150, 255, 150)));
                         } else if id_estacao == self.id_estacao_objetivo_selecionada {
-                            ui.label(egui::RichText::new("Estação de DESTINO")
-                                .size(12.0)
+                            ui.label(egui::RichText::new("🎯 ESTAÇÃO DESTINO")
+                                .size(13.0)
                                 .color(egui::Color32::from_rgb(255, 100, 100))
                                 .strong());
-                        } else if self.estacoes_exploradas_ui.contains(&id_estacao) && self.resultado_caminho_ui.is_some() {
-                            ui.label(egui::RichText::new("Parte da rota encontrada")
-                                .size(12.0)
-                                .color(egui::Color32::from_rgb(100, 255, 150))
-                                .strong());
-                        } else if self.estacoes_exploradas_ui.contains(&id_estacao) {
-                            ui.label(egui::RichText::new("Sendo explorada")
-                                .size(12.0)
-                                .color(egui::Color32::from_rgb(150, 200, 255))
-                                .strong());
+                            ui.label(egui::RichText::new("Esta é a estação que queremos alcançar.\nO algoritmo A* busca o caminho mais eficiente até aqui.")
+                                .size(10.0)
+                                .color(egui::Color32::from_rgb(255, 150, 150)));
+                        } else if let Some(ref solucionador) = self.solucionador_a_estrela {
+                            match solucionador.obter_status_estacao(id_estacao) {
+                                crate::algoritmo_a_estrela::StatusEstacao::Disponivel => {
+                                    ui.label(egui::RichText::new("⚪ DISPONÍVEL")
+                                        .size(12.0)
+                                        .color(egui::Color32::from_rgb(180, 180, 200))
+                                        .strong());
+                                    ui.label(egui::RichText::new("Esta estação ainda não foi explorada.\nPode ser considerada para expansão futura\ndependendo do desenvolvimento do algoritmo.")
+                                        .size(10.0)
+                                        .color(egui::Color32::from_rgb(180, 180, 180)));
+                                },
+                                crate::algoritmo_a_estrela::StatusEstacao::SelecionadaParaExpansao => {
+                                    ui.label(egui::RichText::new("� SELECIONADA PARA EXPANSÃO")
+                                        .size(12.0)
+                                        .color(egui::Color32::from_rgb(255, 255, 0))
+                                        .strong());
+                                    ui.label(egui::RichText::new("Esta estação foi escolhida da fronteira de busca\npara ser expandida no próximo passo.\nTem o menor valor F(x) = G(x) + H(x).")
+                                        .size(10.0)
+                                        .color(egui::Color32::from_rgb(255, 255, 100)));
+                                },
+                                crate::algoritmo_a_estrela::StatusEstacao::ExpandindoVizinhos => {
+                                    ui.label(egui::RichText::new("� EXPANDINDO VIZINHOS")
+                                        .size(12.0)
+                                        .color(egui::Color32::from_rgb(0, 150, 255))
+                                        .strong());
+                                    ui.label(egui::RichText::new("PASSO ATUAL: O algoritmo está analisando\ntodos os vizinhos desta estação.\nCalculando valores G, H e F para cada vizinho.")
+                                        .size(10.0)
+                                        .color(egui::Color32::from_rgb(100, 180, 255)));
+                                },
+                                crate::algoritmo_a_estrela::StatusEstacao::AnalisandoBrickWall => {
+                                    ui.label(egui::RichText::new("� DETECTANDO BRICK WALL")
+                                        .size(12.0)
+                                        .color(egui::Color32::from_rgb(255, 140, 0))
+                                        .strong());
+                                    ui.label(egui::RichText::new("ATENÇÃO: O algoritmo está verificando se\nesta estação é um beco sem saída (brick wall).\nVerificando se há vizinhos válidos disponíveis.")
+                                        .size(10.0)
+                                        .color(egui::Color32::from_rgb(255, 180, 100)));
+                                },
+                                crate::algoritmo_a_estrela::StatusEstacao::BrickWall => {
+                                    ui.label(egui::RichText::new("🧱 BRICK WALL (BECO SEM SAÍDA)")
+                                        .size(12.0)
+                                        .color(egui::Color32::from_rgb(255, 80, 80))
+                                        .strong());
+                                    ui.label(egui::RichText::new("DETECTADO: Esta estação é um beco sem saída!\nTodos os vizinhos já foram explorados ou\nnão levam ao destino. O algoritmo irá voltar.")
+                                        .size(10.0)
+                                        .color(egui::Color32::from_rgb(255, 120, 120)));
+                                },
+                                crate::algoritmo_a_estrela::StatusEstacao::VoltandoParaAnterior => {
+                                    ui.label(egui::RichText::new("🔙 VOLTANDO PARA ANTERIOR")
+                                        .size(12.0)
+                                        .color(egui::Color32::from_rgb(200, 100, 255))
+                                        .strong());
+                                    ui.label(egui::RichText::new("BACKTRACKING: O algoritmo detectou um brick wall\ne está voltando para a estação anterior\npara tentar um caminho alternativo.")
+                                        .size(10.0)
+                                        .color(egui::Color32::from_rgb(220, 150, 255)));
+                                },
+                                crate::algoritmo_a_estrela::StatusEstacao::Explorada => {
+                                    if self.resultado_caminho_ui.is_some() {
+                                        ui.label(egui::RichText::new("✅ PARTE DA SOLUÇÃO")
+                                            .size(12.0)
+                                            .color(egui::Color32::from_rgb(0, 255, 150))
+                                            .strong());
+                                        ui.label(egui::RichText::new("SUCESSO: Esta estação faz parte\ndo caminho ótimo encontrado pelo A*.\nCaminho com menor custo total.")
+                                            .size(10.0)
+                                            .color(egui::Color32::from_rgb(100, 255, 180)));
+                                    } else {
+                                        ui.label(egui::RichText::new("🔵 EXPLORADA")
+                                            .size(12.0)
+                                            .color(egui::Color32::from_rgb(100, 150, 255))
+                                            .strong());
+                                        ui.label(egui::RichText::new("Esta estação foi completamente explorada.\nTodos os seus vizinhos foram analisados\ne ela foi adicionada ao conjunto fechado.")
+                                            .size(10.0)
+                                            .color(egui::Color32::from_rgb(150, 180, 255)));
+                                    }
+                                },
+                            }
                         } else {
-                            ui.label(egui::RichText::new("Estação disponível")
+                            ui.label(egui::RichText::new("⚪ ESTAÇÃO DISPONÍVEL")
                                 .size(12.0)
+                                .color(egui::Color32::from_rgb(180, 180, 180)));
+                            ui.label(egui::RichText::new("Esta estação está disponível para busca.\nAinda não foi analisada pelo algoritmo.")
+                                .size(10.0)
                                 .color(egui::Color32::from_rgb(180, 180, 180)));
                         }
                         
@@ -1212,11 +1301,21 @@ impl MinhaAplicacaoGUI {
             // Posição do marcador (acima da estação)
             let pos_marcador = pos + Vec2::new(0.0, -35.0 * self.zoom_nivel);
             
-            // Determinar que tipo de marcador mostrar (prioridade: início/fim > caminho atual > analisando vizinhos)
+            // Verificar se é brick wall através do solucionador
+            let e_brick_wall = if let Some(ref solucionador) = self.solucionador_a_estrela {
+                solucionador.e_brick_wall(i)
+            } else {
+                false
+            };
+            
+            // Determinar que tipo de marcador mostrar (prioridade: início/fim > brick wall > caminho atual > analisando vizinhos)
             let marcador_info = if i == self.id_estacao_inicio_selecionada {
                 Some(("INÍCIO", Color32::from_rgb(0, 140, 0), Color32::from_rgb(20, 80, 20)))
             } else if i == self.id_estacao_objetivo_selecionada {
                 Some(("FIM", Color32::from_rgb(220, 50, 50), Color32::from_rgb(80, 20, 20)))
+            } else if e_brick_wall {
+                // PRIORIDADE ALTA: Mostrar brick wall
+                Some(("🧱 BRICK WALL", Color32::from_rgb(120, 60, 60), Color32::from_rgb(160, 80, 80)))
             } else if self.estacoes_exploradas_ui.contains(&i) && self.resultado_caminho_ui.is_some() {
                 // Só mostrar "CAMINHO" verde se realmente há uma solução final
                 Some(("CAMINHO", Color32::from_rgb(0, 120, 60), Color32::from_rgb(20, 60, 40)))
@@ -1294,6 +1393,72 @@ impl MinhaAplicacaoGUI {
             }
         }
     }
+    
+    fn desenhar_animacoes_brick_wall(&self, painter: &egui::Painter, rect_desenho: egui::Rect, tempo_atual: f32) {
+        if let Some(ref solucionador) = self.solucionador_a_estrela {
+            for animacao in solucionador.obter_animacoes_ativas() {
+                if !animacao.ativa || animacao.tempo_inicio == 0.0 {
+                    continue;
+                }
+                
+                let tempo_decorrido = tempo_atual - animacao.tempo_inicio;
+                let progresso = (tempo_decorrido / animacao.duracao).min(1.0);
+                
+                // Posição da estação
+                let pos_estacao = self.posicoes_estacoes_tela[animacao.id_estacao] * self.zoom_nivel + 
+                                 self.offset_rolagem + rect_desenho.min.to_vec2();
+                
+                // Efeito de "brick wall" - tijolos aparecendo ao redor da estação
+                let raio_base = 20.0 * self.zoom_nivel;
+                let raio_animacao = raio_base + (progresso * 15.0 * self.zoom_nivel);
+                
+                // Desenhar tijolos em círculo ao redor da estação
+                let num_tijolos = 8;
+                for i in 0..num_tijolos {
+                    let angulo = (i as f32 / num_tijolos as f32) * std::f32::consts::TAU;
+                    let pos_tijolo = pos_estacao + Vec2::new(
+                        raio_animacao * angulo.cos(),
+                        raio_animacao * angulo.sin()
+                    );
+                    
+                    // Tamanho do tijolo baseado no progresso
+                    let tamanho_tijolo = Vec2::new(
+                        6.0 * self.zoom_nivel * progresso,
+                        4.0 * self.zoom_nivel * progresso
+                    );
+                    
+                    // Cor do tijolo com fade baseado no progresso
+                    let alpha = ((1.0 - progresso) * 255.0) as u8;
+                    let cor_tijolo = Color32::from_rgba_premultiplied(139, 69, 19, alpha); // Marrom tijolo
+                    let cor_borda = Color32::from_rgba_premultiplied(160, 82, 45, alpha); // Marrom claro
+                    
+                    // Desenhar tijolo
+                    let rect_tijolo = egui::Rect::from_center_size(pos_tijolo, tamanho_tijolo);
+                    painter.rect_filled(rect_tijolo, 1.0 * self.zoom_nivel, cor_tijolo);
+                    painter.rect_stroke(
+                        rect_tijolo, 
+                        1.0 * self.zoom_nivel, 
+                        Stroke::new(0.5 * self.zoom_nivel, cor_borda),
+                        egui::StrokeKind::Middle
+                    );
+                }
+                
+                // Texto "BRICK WALL" no centro
+                if progresso > 0.3 {
+                    let alpha_texto = ((progresso - 0.3) / 0.7 * 255.0).min(255.0) as u8;
+                    let cor_texto = Color32::from_rgba_premultiplied(200, 50, 50, alpha_texto);
+                    
+                    painter.text(
+                        pos_estacao,
+                        egui::Align2::CENTER_CENTER,
+                        "🧱 BRICK WALL",
+                        egui::FontId::proportional(10.0 * self.zoom_nivel),
+                        cor_texto
+                    );
+                }
+            }
+        }
+    }
 
     fn desenhar_estacoes(&mut self, painter: &egui::Painter, rect_desenho: egui::Rect, grafo: &GrafoMetro, ui: &mut egui::Ui) {
         // Desenha os círculos das estações, nomes, destaques de início/fim, e permite interação
@@ -1309,6 +1474,20 @@ impl MinhaAplicacaoGUI {
             
             // Determinar se esta estação é um vizinho sendo analisado
             let e_vizinho_sendo_analisado = self.vizinhos_sendo_analisados_ui.contains(&i);
+            
+            // Verificar se esta estação está sendo explorada no momento
+            let e_sendo_explorada_agora = if let Some(ref solucionador) = self.solucionador_a_estrela {
+                solucionador.estacao_sendo_explorada_no_momento == Some(i)
+            } else {
+                false
+            };
+            
+            // Verificar se esta estação é brick wall
+            let e_brick_wall = if let Some(ref solucionador) = self.solucionador_a_estrela {
+                solucionador.e_brick_wall(i)
+            } else {
+                false
+            };
             
             // Desenhar efeito visual para vizinhos sendo analisados
             if e_vizinho_sendo_analisado {
@@ -1327,18 +1506,57 @@ impl MinhaAplicacaoGUI {
                 );
             }
             
-            // Cor de preenchimento baseada no status da estação
+            // Desenhar efeito especial para estação sendo explorada no momento
+            if e_sendo_explorada_agora {
+                // Efeito pulsante mais visível para a estação sendo explorada
+                painter.circle_stroke(
+                    pos,
+                    24.0 * self.zoom_nivel,
+                    Stroke::new(3.0 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 220, 0, 200))
+                );
+                
+                painter.circle_stroke(
+                    pos,
+                    21.0 * self.zoom_nivel,
+                    Stroke::new(2.0 * self.zoom_nivel, Color32::from_rgba_premultiplied(255, 200, 0, 150))
+                );
+            }
+            
+            // Cor de preenchimento baseada no status detalhado da estação
             let cor_preenchimento = if i == self.id_estacao_inicio_selecionada {
-                // Estação de início fica verde escuro
-                Color32::from_rgb(0, 60, 0)
-            } else if self.estacoes_exploradas_ui.contains(&i) && self.resultado_caminho_ui.is_some() {
-                // Estações do caminho FINAL (só quando há solução) ficam com verde mais claro
-                Color32::from_rgb(0, 40, 20) // Verde mais sutil para diferenciação
-            } else if self.estacoes_exploradas_ui.contains(&i) && self.solucionador_a_estrela.is_some() {
-                // Estações do caminho PARCIAL (durante a busca) ficam com azul escuro
-                Color32::from_rgb(20, 30, 50) // Azul escuro para caminho parcial
+                Color32::from_rgb(0, 60, 0) // Verde escuro para início
+            } else if i == self.id_estacao_objetivo_selecionada {
+                Color32::from_rgb(60, 0, 0) // Vermelho escuro para objetivo
+            } else if let Some(ref solucionador) = self.solucionador_a_estrela {
+                match solucionador.obter_status_estacao(i) {
+                    crate::algoritmo_a_estrela::StatusEstacao::Disponivel => {
+                        Color32::from_rgb(40, 42, 54) // Cinza escuro - estação disponível
+                    },
+                    crate::algoritmo_a_estrela::StatusEstacao::SelecionadaParaExpansao => {
+                        Color32::from_rgb(60, 60, 20) // Amarelo escuro - selecionada
+                    },
+                    crate::algoritmo_a_estrela::StatusEstacao::ExpandindoVizinhos => {
+                        Color32::from_rgb(20, 40, 60) // Azul escuro - expandindo
+                    },
+                    crate::algoritmo_a_estrela::StatusEstacao::AnalisandoBrickWall => {
+                        Color32::from_rgb(80, 40, 0) // Laranja escuro - analisando brick wall
+                    },
+                    crate::algoritmo_a_estrela::StatusEstacao::BrickWall => {
+                        Color32::from_rgb(60, 20, 20) // Vermelho escuro - brick wall
+                    },
+                    crate::algoritmo_a_estrela::StatusEstacao::VoltandoParaAnterior => {
+                        Color32::from_rgb(40, 20, 60) // Roxo escuro - voltando
+                    },
+                    crate::algoritmo_a_estrela::StatusEstacao::Explorada => {
+                        if self.resultado_caminho_ui.is_some() {
+                            Color32::from_rgb(0, 40, 20) // Verde-escuro - parte da solução final
+                        } else {
+                            Color32::from_rgb(20, 30, 50) // Azul-escuro - explorada durante busca
+                        }
+                    },
+                }
             } else {
-                Color32::from_rgb(40, 42, 54) // Cor base escura para estações não visitadas
+                Color32::from_rgb(40, 42, 54) // Cor base para quando não há solucionador
             };
             
             // Desenhar círculo de fundo para dar profundidade (sombra)
@@ -1355,17 +1573,41 @@ impl MinhaAplicacaoGUI {
                 cor_preenchimento
             );
             
-            // Borda com cor apropriada e espessura maior - ORDEM CORRIGIDA DE PRIORIDADE
+            // Borda com cor bem diferenciada baseada no status
             let (cor_borda, espessura_borda) = if i == self.id_estacao_inicio_selecionada {
-                (Color32::from_rgb(0, 140, 0), 3.0) // Verde mais escuro para início
+                (Color32::from_rgb(0, 220, 0), 4.0) // Verde brilhante para início
             } else if i == self.id_estacao_objetivo_selecionada {
-                (Color32::from_rgb(220, 50, 50), 3.0) // Vermelho para objetivo
+                (Color32::from_rgb(220, 50, 50), 4.0) // Vermelho brilhante para objetivo
+            } else if let Some(ref solucionador) = self.solucionador_a_estrela {
+                match solucionador.obter_status_estacao(i) {
+                    crate::algoritmo_a_estrela::StatusEstacao::Disponivel => {
+                        (Color32::from_rgb(150, 150, 200), 2.0) // Azul claro - disponível
+                    },
+                    crate::algoritmo_a_estrela::StatusEstacao::SelecionadaParaExpansao => {
+                        (Color32::from_rgb(255, 255, 0), 4.0) // Amarelo brilhante - selecionada
+                    },
+                    crate::algoritmo_a_estrela::StatusEstacao::ExpandindoVizinhos => {
+                        (Color32::from_rgb(0, 150, 255), 3.5) // Azul brilhante - expandindo
+                    },
+                    crate::algoritmo_a_estrela::StatusEstacao::AnalisandoBrickWall => {
+                        (Color32::from_rgb(255, 140, 0), 3.5) // Laranja brilhante - analisando brick wall
+                    },
+                    crate::algoritmo_a_estrela::StatusEstacao::BrickWall => {
+                        (Color32::from_rgb(255, 80, 80), 4.0) // Vermelho brilhante - brick wall
+                    },
+                    crate::algoritmo_a_estrela::StatusEstacao::VoltandoParaAnterior => {
+                        (Color32::from_rgb(200, 100, 255), 3.5) // Roxo brilhante - voltando
+                    },
+                    crate::algoritmo_a_estrela::StatusEstacao::Explorada => {
+                        if self.resultado_caminho_ui.is_some() {
+                            (Color32::from_rgb(0, 255, 150), 3.0) // Verde-água - solução final
+                        } else {
+                            (Color32::from_rgb(100, 150, 255), 2.5) // Azul - explorada
+                        }
+                    },
+                }
             } else if e_vizinho_sendo_analisado {
-                (Color32::from_rgb(255, 140, 0), 2.5) // PRIORIDADE ALTA: Laranja para vizinhos sendo analisados
-            } else if self.estacoes_exploradas_ui.contains(&i) && self.resultado_caminho_ui.is_some() {
-                (Color32::from_rgb(0, 180, 100), 2.5) // Verde-água apenas para estações do caminho FINAL
-            } else if self.estacoes_exploradas_ui.contains(&i) && self.solucionador_a_estrela.is_some() {
-                (Color32::from_rgb(100, 150, 255), 2.5) // Azul claro para estações do caminho PARCIAL durante busca
+                (Color32::from_rgb(255, 140, 0), 2.5) // Laranja para vizinhos sendo analisados
             } else if esta_na_solucao {
                 (Color32::from_rgb(0, 150, 136), 3.0) // Verde-azul escuro para estações na solução final
             } else {
@@ -2042,6 +2284,9 @@ impl eframe::App for MinhaAplicacaoGUI {
                 // Desenhar marcadores visuais acima das estações
                 self.desenhar_marcadores_estacoes(&painter, rect_desenho, grafo_ref, ui);
                 
+                // Desenhar animações de brick wall
+                self.desenhar_animacoes_brick_wall(&painter, rect_desenho, ctx.input(|i| i.time) as f32);
+                
                 // Desenhar popups persistentes e processar suas ações
                 let acoes_popup = self.desenhar_popups(ui, rect_desenho, grafo_ref);
                 self.processar_acoes_popup(acoes_popup);
@@ -2053,6 +2298,12 @@ impl eframe::App for MinhaAplicacaoGUI {
                 let tempo = ctx.input(|i| i.time) as f32;
                 if tempo - self.ultimo_tempo_animacao > 0.16 { // ~60 FPS máximo
                     self.ultimo_tempo_animacao = tempo;
+                    
+                    // Atualizar animações se houver solucionador
+                    if let Some(ref mut solucionador) = self.solucionador_a_estrela {
+                        solucionador.atualizar_animacoes(tempo);
+                    }
+                    
                     ctx.request_repaint();
                 }
             }
