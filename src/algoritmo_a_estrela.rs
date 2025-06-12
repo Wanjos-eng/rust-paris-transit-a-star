@@ -225,46 +225,8 @@ impl SolucionadorAEstrela {
                     // Calcula novo custo real acumulado (g) = g_anterior + tempo_conexao + baldeacao
                     let custo_g_novo = no_da_fronteira_atual.custo_g_viagem + conexao.tempo_minutos + custo_baldeacao;
                     // Obtém estimativa até o destino (h) para este vizinho
-                    let mut custo_h = self.grafo.obter_tempo_heuristico_minutos(id_vizinho, self.id_objetivo)
+                    let custo_h = self.grafo.obter_tempo_heuristico_minutos(id_vizinho, self.id_objetivo)
                         .unwrap_or(0.0);
-                    
-                    // SISTEMA DE PENALIDADES INTELIGENTES: Desencorajar nós terminais (becos sem saída)
-                    if let Some(conexoes_do_vizinho) = self.grafo.lista_adjacencia.get(id_vizinho) {
-                        let grau_conectividade = conexoes_do_vizinho.len();
-                        
-                        // Aplicar penalidade apenas se não for o destino final
-                        if id_vizinho != self.id_objetivo {
-                            let penalidade = match grau_conectividade {
-                                1 => {
-                                    // Nó terminal: penalidade MUITO alta para desencorajar fortemente
-                                    let penalidade_fixa: f32 = 50.0; 
-                                    let penalidade_proporcional = custo_h * 2.0; 
-                                    let penalidade_terminal = penalidade_fixa.max(penalidade_proporcional);
-                                    println!("      PENALIDADE TERMINAL ALTA: E{} é um beco sem saída (+{:.1}min)", 
-                                           id_vizinho + 1, penalidade_terminal);
-                                    penalidade_terminal
-                                },
-                                2 => {
-                                    // Baixa conectividade: penalidade moderada
-                                    let penalidade_baixa = custo_h * 0.3; 
-                                    println!("      PENALIDADE BAIXA CONECTIVIDADE: E{} tem apenas 2 conexões (+{:.1}min)", 
-                                           id_vizinho + 1, penalidade_baixa);
-                                    penalidade_baixa
-                                },
-                                3 => {
-                                    // Conectividade média-baixa: penalidade leve
-                                    let penalidade_leve = custo_h * 0.1;
-                                    if penalidade_leve > 1.0 {
-                                        println!("      PENALIDADE LEVE: E{} tem conectividade média-baixa (+{:.1}min)", 
-                                               id_vizinho + 1, penalidade_leve);
-                                    }
-                                    penalidade_leve
-                                },
-                                _ => 0.0 // Conectividade boa (4+): sem penalidade
-                            };
-                            custo_h += penalidade;
-                        }
-                    }
                     
                     // Calcula custo total estimado (f) = g + h
                     let custo_f = custo_g_novo + custo_h;
