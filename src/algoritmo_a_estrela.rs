@@ -515,7 +515,6 @@ impl SolucionadorAEstrela {
         }
     }
 
-    // Método legado mantido para compatibilidade (pode ser removido posteriormente)
     pub fn proximo_passo(&mut self) -> ResultadoPassoAEstrela {
         // Salvar estado atual no histórico antes de fazer modificações
         self.salvar_estado_no_historico();
@@ -844,9 +843,7 @@ impl SolucionadorAEstrela {
         println!("  Baldeações: {}", transfers);
     }
 
-    // Adicionar um método para validar a rota específica
     pub fn validar_rota_especifica(&self) {
-        // Testar especificamente a rota E6 -> E5 -> E4 -> E13
         let estacoes = [5, 4, 3, 12]; // Índices zero-based 
         let mut tempo_total = 0.0;
         let mut baldeacoes = 0;
@@ -905,7 +902,6 @@ impl SolucionadorAEstrela {
         println!("=================================================\n");
     }
     
-    // Chamar este método de validação durante a inicialização
     pub fn verificar_dados(&self) {
         self.validar_rota_especifica();
     }
@@ -915,7 +911,6 @@ impl SolucionadorAEstrela {
         self.status_estacoes.get(&id_estacao).cloned().unwrap_or(StatusEstacao::Disponivel)
     }
 
-    // Métodos auxiliares para controle de estado
     pub fn esta_finalizado(&self) -> bool {
         matches!(self.estado_atual, EstadoAlgoritmo::CaminhoEncontrado | EstadoAlgoritmo::SemCaminho)
     }
@@ -963,8 +958,6 @@ impl SolucionadorAEstrela {
         
         self.custos_g_viagem_mapa.insert((self.id_inicio, self.linha_de_partida_busca), custo_g_viagem_inicial);
     }
-    
-    // Métodos para controle de histórico e navegação de passos
     
     /// Salva o estado atual no histórico antes de fazer modificações
     fn salvar_estado_no_historico(&mut self) {
