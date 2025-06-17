@@ -166,9 +166,6 @@ impl MinhaAplicacaoGUI {
 
     fn executar_proximo_passo_a_estrela(&mut self) {
         if let Some(ref mut solucionador) = self.solucionador_a_estrela {
-            // Atualizar animações primeiro
-            solucionador.atualizar_animacoes(self.ultimo_tempo_animacao);
-            
             match solucionador.proximo_passo() {
                 crate::algoritmo_a_estrela::ResultadoPassoAEstrela::EmProgresso => {
                     // Atualizar a visualização com base na análise atual
@@ -191,9 +188,8 @@ impl MinhaAplicacaoGUI {
                                         if let Ok(id_estacao_um_baseado) = numero_str.parse::<usize>() {
                                             if id_estacao_um_baseado > 0 {
                                                 let id_estacao = id_estacao_um_baseado - 1; // Converter para zero-based
-                                                // Só adicionar se não foi explorado ainda e não é brick wall
-                                                if !self.estacoes_exploradas_ui.contains(&id_estacao) &&
-                                                   !solucionador.e_brick_wall(id_estacao) {
+                                                // Só adicionar se não foi explorado ainda
+                                                if !self.estacoes_exploradas_ui.contains(&id_estacao) {
                                                     self.vizinhos_sendo_analisados_ui.insert(id_estacao);
                                                 }
                                             }
@@ -212,21 +208,11 @@ impl MinhaAplicacaoGUI {
                             "Desconhecida"
                         };
                         
-                        // Mensagem diferente se for brick wall
-                        if solucionador.e_brick_wall(analise.estacao_expandida) {
-                            self.mensagem_status_ui = format!(
-                                "🧱 BRICK WALL: {} (E{}) - Beco sem saída detectado!",
-                                nome_estacao,
-                                analise.estacao_expandida + 1
-                            );
-                        } else {
-                            self.mensagem_status_ui = format!(
-                                "Expandindo estação: {} (E{}) - {} vizinhos analisados",
-                                nome_estacao,
-                                analise.estacao_expandida + 1,
-                                self.vizinhos_sendo_analisados_ui.len()
-                            );
-                        }
+                        self.mensagem_status_ui = format!(
+                            "Expandindo {} (E{}) - Analisando vizinhos",
+                            nome_estacao,
+                            analise.estacao_expandida + 1
+                        );
                     } else {
                         self.mensagem_status_ui = "Passo em progresso, mas sem detalhes da análise.".to_string();
                     }
@@ -1143,33 +1129,6 @@ impl MinhaAplicacaoGUI {
                                         .size(10.0)
                                         .color(egui::Color32::from_rgb(100, 180, 255)));
                                 },
-                                crate::algoritmo_a_estrela::StatusEstacao::AnalisandoBrickWall => {
-                                    ui.label(egui::RichText::new("� DETECTANDO BRICK WALL")
-                                        .size(12.0)
-                                        .color(egui::Color32::from_rgb(255, 140, 0))
-                                        .strong());
-                                    ui.label(egui::RichText::new("ATENÇÃO: O algoritmo está verificando se\nesta estação é um beco sem saída (brick wall).\nVerificando se há vizinhos válidos disponíveis.")
-                                        .size(10.0)
-                                        .color(egui::Color32::from_rgb(255, 180, 100)));
-                                },
-                                crate::algoritmo_a_estrela::StatusEstacao::BrickWall => {
-                                    ui.label(egui::RichText::new("🧱 BRICK WALL (BECO SEM SAÍDA)")
-                                        .size(12.0)
-                                        .color(egui::Color32::from_rgb(255, 80, 80))
-                                        .strong());
-                                    ui.label(egui::RichText::new("DETECTADO: Esta estação é um beco sem saída!\nTodos os vizinhos já foram explorados ou\nnão levam ao destino. O algoritmo irá voltar.")
-                                        .size(10.0)
-                                        .color(egui::Color32::from_rgb(255, 120, 120)));
-                                },
-                                crate::algoritmo_a_estrela::StatusEstacao::VoltandoParaAnterior => {
-                                    ui.label(egui::RichText::new("🔙 VOLTANDO PARA ANTERIOR")
-                                        .size(12.0)
-                                        .color(egui::Color32::from_rgb(200, 100, 255))
-                                        .strong());
-                                    ui.label(egui::RichText::new("BACKTRACKING: O algoritmo detectou um brick wall\ne está voltando para a estação anterior\npara tentar um caminho alternativo.")
-                                        .size(10.0)
-                                        .color(egui::Color32::from_rgb(220, 150, 255)));
-                                },
                                 crate::algoritmo_a_estrela::StatusEstacao::Explorada => {
                                     if self.resultado_caminho_ui.is_some() {
                                         ui.label(egui::RichText::new("✅ PARTE DA SOLUÇÃO")
@@ -1301,21 +1260,11 @@ impl MinhaAplicacaoGUI {
             // Posição do marcador (acima da estação)
             let pos_marcador = pos + Vec2::new(0.0, -35.0 * self.zoom_nivel);
             
-            // Verificar se é brick wall através do solucionador
-            let e_brick_wall = if let Some(ref solucionador) = self.solucionador_a_estrela {
-                solucionador.e_brick_wall(i)
-            } else {
-                false
-            };
-            
-            // Determinar que tipo de marcador mostrar (prioridade: início/fim > brick wall > caminho atual > analisando vizinhos)
+            // Determinar que tipo de marcador mostrar (prioridade: início/fim > caminho atual > analisando vizinhos)
             let marcador_info = if i == self.id_estacao_inicio_selecionada {
                 Some(("INÍCIO", Color32::from_rgb(0, 140, 0), Color32::from_rgb(20, 80, 20)))
             } else if i == self.id_estacao_objetivo_selecionada {
                 Some(("FIM", Color32::from_rgb(220, 50, 50), Color32::from_rgb(80, 20, 20)))
-            } else if e_brick_wall {
-                // PRIORIDADE ALTA: Mostrar brick wall
-                Some(("🧱 BRICK WALL", Color32::from_rgb(120, 60, 60), Color32::from_rgb(160, 80, 80)))
             } else if self.estacoes_exploradas_ui.contains(&i) && self.resultado_caminho_ui.is_some() {
                 // Só mostrar "CAMINHO" verde se realmente há uma solução final
                 Some(("CAMINHO", Color32::from_rgb(0, 120, 60), Color32::from_rgb(20, 60, 40)))
@@ -1393,72 +1342,6 @@ impl MinhaAplicacaoGUI {
             }
         }
     }
-    
-    fn desenhar_animacoes_brick_wall(&self, painter: &egui::Painter, rect_desenho: egui::Rect, tempo_atual: f32) {
-        if let Some(ref solucionador) = self.solucionador_a_estrela {
-            for animacao in solucionador.obter_animacoes_ativas() {
-                if !animacao.ativa || animacao.tempo_inicio == 0.0 {
-                    continue;
-                }
-                
-                let tempo_decorrido = tempo_atual - animacao.tempo_inicio;
-                let progresso = (tempo_decorrido / animacao.duracao).min(1.0);
-                
-                // Posição da estação
-                let pos_estacao = self.posicoes_estacoes_tela[animacao.id_estacao] * self.zoom_nivel + 
-                                 self.offset_rolagem + rect_desenho.min.to_vec2();
-                
-                // Efeito de "brick wall" - tijolos aparecendo ao redor da estação
-                let raio_base = 20.0 * self.zoom_nivel;
-                let raio_animacao = raio_base + (progresso * 15.0 * self.zoom_nivel);
-                
-                // Desenhar tijolos em círculo ao redor da estação
-                let num_tijolos = 8;
-                for i in 0..num_tijolos {
-                    let angulo = (i as f32 / num_tijolos as f32) * std::f32::consts::TAU;
-                    let pos_tijolo = pos_estacao + Vec2::new(
-                        raio_animacao * angulo.cos(),
-                        raio_animacao * angulo.sin()
-                    );
-                    
-                    // Tamanho do tijolo baseado no progresso
-                    let tamanho_tijolo = Vec2::new(
-                        6.0 * self.zoom_nivel * progresso,
-                        4.0 * self.zoom_nivel * progresso
-                    );
-                    
-                    // Cor do tijolo com fade baseado no progresso
-                    let alpha = ((1.0 - progresso) * 255.0) as u8;
-                    let cor_tijolo = Color32::from_rgba_premultiplied(139, 69, 19, alpha); // Marrom tijolo
-                    let cor_borda = Color32::from_rgba_premultiplied(160, 82, 45, alpha); // Marrom claro
-                    
-                    // Desenhar tijolo
-                    let rect_tijolo = egui::Rect::from_center_size(pos_tijolo, tamanho_tijolo);
-                    painter.rect_filled(rect_tijolo, 1.0 * self.zoom_nivel, cor_tijolo);
-                    painter.rect_stroke(
-                        rect_tijolo, 
-                        1.0 * self.zoom_nivel, 
-                        Stroke::new(0.5 * self.zoom_nivel, cor_borda),
-                        egui::StrokeKind::Middle
-                    );
-                }
-                
-                // Texto "BRICK WALL" no centro
-                if progresso > 0.3 {
-                    let alpha_texto = ((progresso - 0.3) / 0.7 * 255.0).min(255.0) as u8;
-                    let cor_texto = Color32::from_rgba_premultiplied(200, 50, 50, alpha_texto);
-                    
-                    painter.text(
-                        pos_estacao,
-                        egui::Align2::CENTER_CENTER,
-                        "🧱 BRICK WALL",
-                        egui::FontId::proportional(10.0 * self.zoom_nivel),
-                        cor_texto
-                    );
-                }
-            }
-        }
-    }
 
     fn desenhar_estacoes(&mut self, painter: &egui::Painter, rect_desenho: egui::Rect, grafo: &GrafoMetro, ui: &mut egui::Ui) {
         // Desenha os círculos das estações, nomes, destaques de início/fim, e permite interação
@@ -1478,13 +1361,6 @@ impl MinhaAplicacaoGUI {
             // Verificar se esta estação está sendo explorada no momento
             let e_sendo_explorada_agora = if let Some(ref solucionador) = self.solucionador_a_estrela {
                 solucionador.estacao_sendo_explorada_no_momento == Some(i)
-            } else {
-                false
-            };
-            
-            // Verificar se esta estação é brick wall
-            let e_brick_wall = if let Some(ref solucionador) = self.solucionador_a_estrela {
-                solucionador.e_brick_wall(i)
             } else {
                 false
             };
@@ -1538,15 +1414,6 @@ impl MinhaAplicacaoGUI {
                     crate::algoritmo_a_estrela::StatusEstacao::ExpandindoVizinhos => {
                         Color32::from_rgb(20, 40, 60) // Azul escuro - expandindo
                     },
-                    crate::algoritmo_a_estrela::StatusEstacao::AnalisandoBrickWall => {
-                        Color32::from_rgb(80, 40, 0) // Laranja escuro - analisando brick wall
-                    },
-                    crate::algoritmo_a_estrela::StatusEstacao::BrickWall => {
-                        Color32::from_rgb(60, 20, 20) // Vermelho escuro - brick wall
-                    },
-                    crate::algoritmo_a_estrela::StatusEstacao::VoltandoParaAnterior => {
-                        Color32::from_rgb(40, 20, 60) // Roxo escuro - voltando
-                    },
                     crate::algoritmo_a_estrela::StatusEstacao::Explorada => {
                         if self.resultado_caminho_ui.is_some() {
                             Color32::from_rgb(0, 40, 20) // Verde-escuro - parte da solução final
@@ -1588,15 +1455,6 @@ impl MinhaAplicacaoGUI {
                     },
                     crate::algoritmo_a_estrela::StatusEstacao::ExpandindoVizinhos => {
                         (Color32::from_rgb(0, 150, 255), 3.5) // Azul brilhante - expandindo
-                    },
-                    crate::algoritmo_a_estrela::StatusEstacao::AnalisandoBrickWall => {
-                        (Color32::from_rgb(255, 140, 0), 3.5) // Laranja brilhante - analisando brick wall
-                    },
-                    crate::algoritmo_a_estrela::StatusEstacao::BrickWall => {
-                        (Color32::from_rgb(255, 80, 80), 4.0) // Vermelho brilhante - brick wall
-                    },
-                    crate::algoritmo_a_estrela::StatusEstacao::VoltandoParaAnterior => {
-                        (Color32::from_rgb(200, 100, 255), 3.5) // Roxo brilhante - voltando
                     },
                     crate::algoritmo_a_estrela::StatusEstacao::Explorada => {
                         if self.resultado_caminho_ui.is_some() {
@@ -2284,9 +2142,6 @@ impl eframe::App for MinhaAplicacaoGUI {
                 // Desenhar marcadores visuais acima das estações
                 self.desenhar_marcadores_estacoes(&painter, rect_desenho, grafo_ref, ui);
                 
-                // Desenhar animações de brick wall
-                self.desenhar_animacoes_brick_wall(&painter, rect_desenho, ctx.input(|i| i.time) as f32);
-                
                 // Desenhar popups persistentes e processar suas ações
                 let acoes_popup = self.desenhar_popups(ui, rect_desenho, grafo_ref);
                 self.processar_acoes_popup(acoes_popup);
@@ -2298,11 +2153,6 @@ impl eframe::App for MinhaAplicacaoGUI {
                 let tempo = ctx.input(|i| i.time) as f32;
                 if tempo - self.ultimo_tempo_animacao > 0.16 { // ~60 FPS máximo
                     self.ultimo_tempo_animacao = tempo;
-                    
-                    // Atualizar animações se houver solucionador
-                    if let Some(ref mut solucionador) = self.solucionador_a_estrela {
-                        solucionador.atualizar_animacoes(tempo);
-                    }
                     
                     ctx.request_repaint();
                 }

@@ -86,18 +86,7 @@ pub enum StatusEstacao {
     Disponivel,
     SelecionadaParaExpansao,    // Tirada da fronteira, vai ser expandida
     ExpandindoVizinhos,         // Analisando seus vizinhos
-    AnalisandoBrickWall,        // Verificando se é brick wall
-    BrickWall,                  // Confirmado como brick wall
-    VoltandoParaAnterior,       // Processo de voltar para estação anterior
     Explorada,                  // Completamente processada
-}
-
-#[derive(Debug, Clone)]
-pub struct AnimacaoBrickWall {
-    pub id_estacao: IdEstacao,
-    pub tempo_inicio: f32,
-    pub duracao: f32,
-    pub ativa: bool,
 }
 
 #[derive(Debug)]
@@ -111,12 +100,8 @@ pub struct SolucionadorAEstrela {
     custos_g_viagem_mapa: HashMap<IdEstacao, f32>, 
     predecessores_info: HashMap<IdEstacao, (IdEstacao, Option<CorLinha>, CorLinha)>,
     pub ultima_analise: Option<DetalhesAnalise>, // Novo campo para armazenar detalhes da última análise
-    pub estacoes_brick_wall: HashSet<IdEstacao>, // Estações identificadas como becos sem saída
     pub status_estacoes: HashMap<IdEstacao, StatusEstacao>, // Status de cada estação
-    pub animacoes_brick_wall: Vec<AnimacaoBrickWall>, // Animações ativas
-    pub estacoes_para_verificar_brick_wall: HashSet<IdEstacao>, // Estações que devem ser verificadas no próximo passo
     pub estacao_sendo_explorada_no_momento: Option<IdEstacao>, // Estação que está sendo explorada neste momento
-    pub estacao_anterior_brick_wall: Option<IdEstacao>, // Estação de onde voltamos após encontrar brick wall
     pub passo_atual: usize, // Contador de passos para controle didático
     pub vizinhos_sendo_analisados: HashSet<IdEstacao>, // Vizinhos sendo analisados no passo atual
 }
@@ -173,12 +158,8 @@ impl SolucionadorAEstrela {
             custos_g_viagem_mapa: custos_g_map,
             predecessores_info: HashMap::new(),
             ultima_analise: None, // Inicializar como None
-            estacoes_brick_wall: HashSet::new(), // Inicializar vazio
             status_estacoes: HashMap::new(), // Inicializar vazio
-            animacoes_brick_wall: Vec::new(), // Inicializar vazio
-            estacoes_para_verificar_brick_wall: HashSet::new(), // Inicializar vazio
             estacao_sendo_explorada_no_momento: None, // Inicializar como None
-            estacao_anterior_brick_wall: None, // Inicializar como None
             passo_atual: 0, // Inicializar contador de passos
             vizinhos_sendo_analisados: HashSet::new(), // Inicializar vazio
         }
@@ -191,68 +172,7 @@ impl SolucionadorAEstrela {
         self.passo_atual += 1;
         println!("\n=== PASSO {} ===", self.passo_atual);
         
-        // ETAPA 1: Verificar se há estações pendentes para verificação de brick wall
-        if !self.estacoes_para_verificar_brick_wall.is_empty() {
-            let estacao_para_verificar = *self.estacoes_para_verificar_brick_wall.iter().next().unwrap();
-            self.estacoes_para_verificar_brick_wall.remove(&estacao_para_verificar);
-            
-            println!("VERIFICANDO BRICK WALL: Analisando se E{} é um beco sem saída", estacao_para_verificar + 1);
-            
-            // Atualizar status visual para "analisando brick wall"
-            self.status_estacoes.insert(estacao_para_verificar, StatusEstacao::AnalisandoBrickWall);
-            
-            // Verificar se realmente é brick wall
-            if let Some(conexoes) = self.grafo.lista_adjacencia.get(estacao_para_verificar) {
-                let vizinhos_validos: Vec<_> = conexoes.iter()
-                    .filter(|c| !self.explorados.contains(&c.para_estacao) && 
-                               !self.estacoes_brick_wall.contains(&c.para_estacao))
-                    .collect();
-                
-                if vizinhos_validos.is_empty() {
-                    println!("  BRICK WALL CONFIRMADO: E{} não tem vizinhos válidos!", estacao_para_verificar + 1);
-                    
-                    // Marcar como brick wall
-                    self.estacoes_brick_wall.insert(estacao_para_verificar);
-                    self.status_estacoes.insert(estacao_para_verificar, StatusEstacao::BrickWall);
-                    
-                    // Configurar para voltar à estação anterior
-                    self.estacao_anterior_brick_wall = self.estacao_sendo_explorada_no_momento;
-                    
-                    // Criar animação brick wall
-                    self.animacoes_brick_wall.push(AnimacaoBrickWall {
-                        id_estacao: estacao_para_verificar,
-                        tempo_inicio: 0.0,
-                        duracao: 2.0,
-                        ativa: true,
-                    });
-                    
-                    // Remover da fronteira se existir
-                    self.fronteira.retain(|node| node.id_estacao != estacao_para_verificar);
-                    
-                    // Criar análise especial para brick wall
-                    self.ultima_analise = Some(DetalhesAnalise {
-                        estacao_expandida: estacao_para_verificar,
-                        vizinhos_analisados: vec!["BRICK WALL: Nenhum vizinho válido".to_string()],
-                        fronteira_atual: vec![],
-                    });
-                    
-                    return ResultadoPassoAEstrela::EmProgresso;
-                } else {
-                    println!("  E{} ainda tem vizinhos válidos, não é brick wall", estacao_para_verificar + 1);
-                    self.status_estacoes.insert(estacao_para_verificar, StatusEstacao::Explorada);
-                }
-            }
-        }
-        
-        // ETAPA 2: Verificar se estamos voltando de um brick wall
-        if let Some(estacao_anterior) = self.estacao_anterior_brick_wall {
-            println!("VOLTANDO: Retornando para E{} após detectar brick wall", estacao_anterior + 1);
-            self.status_estacoes.insert(estacao_anterior, StatusEstacao::VoltandoParaAnterior);
-            self.estacao_anterior_brick_wall = None;
-            return ResultadoPassoAEstrela::EmProgresso;
-        }
-        
-        // ETAPA 3: Continuar com o algoritmo normal
+        // Continuar com o algoritmo normal
         if let Some(no_da_fronteira_atual) = self.fronteira.pop() {
             println!("SELECIONANDO: Estação E{} (f={:.1}, g={:.1}, h={:.1})", 
                      no_da_fronteira_atual.id_estacao + 1,
@@ -294,15 +214,10 @@ impl SolucionadorAEstrela {
                     // Adicionar à lista de vizinhos sendo analisados
                     self.vizinhos_sendo_analisados.insert(id_vizinho);
                     
-                    // Pula vizinhos já completamente explorados ou marcados como brick wall
-                    if self.explorados.contains(&id_vizinho) || self.estacoes_brick_wall.contains(&id_vizinho) {
-                        if self.explorados.contains(&id_vizinho) {
-                            println!("    Ignorando E{}: já explorado", id_vizinho + 1);
-                            vizinhos_analisados.push(format!("E{}: já explorado", id_vizinho + 1));
-                        } else {
-                            println!("    Ignorando E{}: brick wall", id_vizinho + 1);
-                            vizinhos_analisados.push(format!("E{}: brick wall", id_vizinho + 1));
-                        }
+                    // Pula vizinhos já completamente explorados
+                    if self.explorados.contains(&id_vizinho) {
+                        println!("    Ignorando E{}: já explorado", id_vizinho + 1);
+                        vizinhos_analisados.push(format!("E{}: já explorado", id_vizinho + 1));
                         continue;
                     }
                     
@@ -386,22 +301,6 @@ impl SolucionadorAEstrela {
                 fronteira_atual.push(format!("E{}: f={:.1}", node.id_estacao + 1, node.custo_f));
             }
             
-            // VERIFICAR SE DEVE MARCAR PARA BRICK WALL NO PRÓXIMO PASSO
-            if no_da_fronteira_atual.id_estacao != self.id_objetivo {
-                if let Some(conexoes) = self.grafo.lista_adjacencia.get(no_da_fronteira_atual.id_estacao) {
-                    let vizinhos_validos: Vec<_> = conexoes.iter()
-                        .filter(|c| !self.explorados.contains(&c.para_estacao) && 
-                                   !self.estacoes_brick_wall.contains(&c.para_estacao))
-                        .collect();
-                    
-                    if vizinhos_validos.is_empty() {
-                        println!("  MARCANDO E{} para verificação de brick wall no próximo passo", 
-                                no_da_fronteira_atual.id_estacao + 1);
-                        self.estacoes_para_verificar_brick_wall.insert(no_da_fronteira_atual.id_estacao);
-                    }
-                }
-            }
-            
             // Armazenar detalhes da análise
             self.ultima_analise = Some(DetalhesAnalise {
                 estacao_expandida: no_da_fronteira_atual.id_estacao,
@@ -414,7 +313,6 @@ impl SolucionadorAEstrela {
         }
         
         ResultadoPassoAEstrela::NenhumCaminhoPossivel
-        
     }
 
     // PARTE 3: APRESENTAÇÃO DO RESULTADO - Constrói o itinerário final detalhado
@@ -640,34 +538,6 @@ impl SolucionadorAEstrela {
     // Chamar este método de validação durante a inicialização
     pub fn verificar_dados(&self) {
         self.validar_rota_especifica();
-    }
-    
-    // MÉTODOS PARA GERENCIAR BRICK WALLS E ANIMAÇÕES
-    
-    // Atualiza animações de brick wall
-    pub fn atualizar_animacoes(&mut self, tempo_atual: f32) {
-        for animacao in &mut self.animacoes_brick_wall {
-            if animacao.ativa && animacao.tempo_inicio == 0.0 {
-                animacao.tempo_inicio = tempo_atual;
-            }
-            
-            if animacao.ativa && (tempo_atual - animacao.tempo_inicio) > animacao.duracao {
-                animacao.ativa = false;
-            }
-        }
-        
-        // Remove animações inativas
-        self.animacoes_brick_wall.retain(|a| a.ativa);
-    }
-    
-    // Obtém animações ativas
-    pub fn obter_animacoes_ativas(&self) -> &Vec<AnimacaoBrickWall> {
-        &self.animacoes_brick_wall
-    }
-    
-    // Verifica se uma estação é brick wall
-    pub fn e_brick_wall(&self, id_estacao: IdEstacao) -> bool {
-        self.estacoes_brick_wall.contains(&id_estacao)
     }
     
     // Obtém status de uma estação
