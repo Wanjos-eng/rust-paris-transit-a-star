@@ -591,12 +591,18 @@ impl SolucionadorAEstrela {
                         .unwrap_or(0.0);
                     let custo_f = custo_g_novo + custo_h;
                     
-                    // Verificar se já foi explorado - mas incluir valores para fins educativos
+                    // Verificar se já foi explorado - mostrar valores originais salvos
                     let estado_vizinho = (id_vizinho, Some(conexao.cor_linha));
                     if self.explorados.contains(&estado_vizinho) {
                         println!("    Ignorando E{}: já explorado", id_vizinho + 1);
+                        
+                        // Buscar os valores originais salvos no mapa de custos
+                        let custo_g_original = self.custos_g_viagem_mapa.get(&estado_vizinho).copied().unwrap_or(custo_g_novo);
+                        let custo_h_original = self.grafo.obter_tempo_heuristico_minutos(id_vizinho, self.id_objetivo).unwrap_or(0.0);
+                        let custo_f_original = custo_g_original + custo_h_original;
+                        
                         vizinhos_analisados.push(format!("E{}: g={:.1}, h={:.1}, f={:.1} - JÁ EXPLORADO", 
-                                                         id_vizinho + 1, custo_g_novo, custo_h, custo_f));
+                                                         id_vizinho + 1, custo_g_original, custo_h_original, custo_f_original));
                         continue;
                     }
                     
@@ -605,11 +611,13 @@ impl SolucionadorAEstrela {
                     
                     // Verificar se já existe um caminho melhor - CORRIGIDO CONFORME LITERATURA A*
                     let mut ja_tem_melhor_caminho = false;
+                    let mut custo_g_melhor_existente = custo_g_novo;
                     
                     // Verificar no mapa de custos g
                     if let Some(&custo_g_registrado) = self.custos_g_viagem_mapa.get(&estado_vizinho) {
                         if custo_g_registrado <= custo_g_novo {
                             ja_tem_melhor_caminho = true;
+                            custo_g_melhor_existente = custo_g_registrado;
                         }
                     }
                     
@@ -620,6 +628,7 @@ impl SolucionadorAEstrela {
                                no_fronteira.linha_chegada == Some(conexao.cor_linha) &&
                                no_fronteira.custo_g_viagem <= custo_g_novo {
                                 ja_tem_melhor_caminho = true;
+                                custo_g_melhor_existente = no_fronteira.custo_g_viagem;
                                 break;
                             }
                         }
@@ -650,8 +659,11 @@ impl SolucionadorAEstrela {
                         vizinhos_analisados.push(format!("E{}: g={:.1}, h={:.1}, f={:.1} - ADICIONADO", 
                                                          id_vizinho + 1, custo_g_novo, custo_h, custo_f));
                     } else {
+                        // Mostrar os valores do caminho melhor existente, não os novos calculados
+                        let custo_h_melhor = self.grafo.obter_tempo_heuristico_minutos(id_vizinho, self.id_objetivo).unwrap_or(0.0);
+                        let custo_f_melhor = custo_g_melhor_existente + custo_h_melhor;
                         vizinhos_analisados.push(format!("E{}: g={:.1}, h={:.1}, f={:.1} - CAMINHO MELHOR JÁ EXISTE", 
-                                                         id_vizinho + 1, custo_g_novo, custo_h, custo_f));
+                                                         id_vizinho + 1, custo_g_melhor_existente, custo_h_melhor, custo_f_melhor));
                     }
                 }
             }
