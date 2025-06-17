@@ -1856,6 +1856,35 @@ impl MinhaAplicacaoGUI {
         acoes
     }
 
+    // Método para atualizar o estado visual da GUI com base no solucionador atual
+    fn atualizar_estado_visual_do_solucionador(&mut self) {
+        if let Some(ref solucionador) = self.solucionador_a_estrela {
+            // Atualizar estações exploradas baseado no status do solucionador
+            self.estacoes_exploradas_ui.clear();
+            for (id_estacao, status) in &solucionador.status_estacoes {
+                match status {
+                    crate::algoritmo_a_estrela::StatusEstacao::Explorada => {
+                        self.estacoes_exploradas_ui.insert(*id_estacao);
+                    },
+                    _ => {}
+                }
+            }
+            
+            // Atualizar estação sendo explorada no momento
+            self.estacao_sendo_expandida_ui = solucionador.estacao_sendo_explorada_no_momento;
+            
+            // Atualizar vizinhos sendo analisados
+            self.vizinhos_sendo_analisados_ui = solucionador.vizinhos_sendo_analisados.clone();
+            
+            // Atualizar detalhes da análise se disponível
+            if let Some(ref analise) = solucionador.ultima_analise {
+                self.detalhes_analise_ui = analise.vizinhos_analisados.clone();
+            } else {
+                self.detalhes_analise_ui.clear();
+            }
+        }
+    }
+
     // ...existing methods...
 }
 
@@ -1917,9 +1946,49 @@ impl eframe::App for MinhaAplicacaoGUI {
                         .strong());
                     ui.add_space(5.0);
                     
-                    if ui.add_sized(tamanho_botao, egui::Button::new("Próximo Passo")).clicked() {
-                        self.executar_proximo_passo_a_estrela();
-                    }
+                    // Botão "Passo Anterior" - só habilitado se houver histórico
+                    let pode_voltar = if let Some(ref solucionador) = self.solucionador_a_estrela {
+                        solucionador.pode_voltar_passo()
+                    } else {
+                        false
+                    };
+                    
+                    ui.horizontal(|ui| {
+                        let mut botao_anterior = egui::Button::new("← Passo Anterior");
+                        if !pode_voltar {
+                            botao_anterior = botao_anterior.fill(Color32::from_gray(60));
+                        }
+                        
+                        if ui.add_sized([95.0, 32.0], botao_anterior).clicked() && pode_voltar {
+                            let sucesso_volta = if let Some(ref mut solucionador) = self.solucionador_a_estrela {
+                                solucionador.passo_anterior()
+                            } else {
+                                false
+                            };
+                            
+                            if sucesso_volta {
+                                // Atualizar estado visual da GUI
+                                self.atualizar_estado_visual_do_solucionador();
+                                let num_passos = if let Some(ref solucionador) = self.solucionador_a_estrela {
+                                    solucionador.numero_passos_historico()
+                                } else {
+                                    0
+                                };
+                                self.mensagem_status_ui = format!(
+                                    "Voltou para o passo anterior. Histórico: {} passos", 
+                                    num_passos
+                                );
+                            } else {
+                                self.mensagem_status_ui = "Não foi possível voltar: já está no início.".to_string();
+                            }
+                        }
+                        
+                        ui.add_space(5.0);
+                        
+                        if ui.add_sized([95.0, 32.0], egui::Button::new("Próximo Passo →")).clicked() {
+                            self.executar_proximo_passo_a_estrela();
+                        }
+                    });
                     
                     ui.add_space(3.0);
                     

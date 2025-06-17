@@ -165,6 +165,25 @@ pub enum EstadoAlgoritmo {
     SemCaminho,
 }
 
+// Novo struct para armazenar o estado completo do algoritmo em um ponto específico
+#[derive(Debug, Clone)]
+pub struct SnapshotEstado {
+    pub fronteira: BinaryHeap<EstadoNoFronteira>,
+    pub explorados: HashSet<(IdEstacao, Option<CorLinha>)>,
+    pub custos_g_viagem_mapa: HashMap<(IdEstacao, Option<CorLinha>), f32>,
+    pub predecessores_info: HashMap<IdEstacao, (IdEstacao, Option<CorLinha>, CorLinha)>,
+    pub status_estacoes: HashMap<IdEstacao, StatusEstacao>,
+    pub estacao_sendo_explorada_no_momento: Option<IdEstacao>,
+    pub passo_atual: usize,
+    pub vizinhos_sendo_analisados: HashSet<IdEstacao>,
+    pub estado_atual: EstadoAlgoritmo,
+    pub no_atual: Option<EstadoNoFronteira>,
+    pub vizinhos_atuais: Vec<crate::grafo_metro::Conexao>,
+    pub indice_vizinho_atual: usize,
+    pub vizinhos_adicionados_neste_passo: usize,
+    pub ultima_analise: Option<DetalhesAnalise>,
+}
+
 #[derive(Debug)]
 pub struct SolucionadorAEstrela {
     grafo: Arc<GrafoMetro>,
@@ -187,6 +206,10 @@ pub struct SolucionadorAEstrela {
     vizinhos_atuais: Vec<crate::grafo_metro::Conexao>,
     indice_vizinho_atual: usize,
     vizinhos_adicionados_neste_passo: usize,
+    
+    // Campos para controle de histórico e navegação pelos passos
+    historico_estados: Vec<SnapshotEstado>, // Histórico de estados anteriores
+    max_historico: usize, // Limite máximo de estados no histórico
 }
 
 impl SolucionadorAEstrela {
@@ -252,6 +275,10 @@ impl SolucionadorAEstrela {
             vizinhos_atuais: Vec::new(),
             indice_vizinho_atual: 0,
             vizinhos_adicionados_neste_passo: 0,
+            
+            // Inicializar campos de histórico
+            historico_estados: Vec::new(),
+            max_historico: 50, // Limitar a 50 passos para evitar uso excessivo de memória
         }
     }
 
@@ -499,6 +526,9 @@ impl SolucionadorAEstrela {
 
     // Método legado mantido para compatibilidade (pode ser removido posteriormente)
     pub fn proximo_passo(&mut self) -> ResultadoPassoAEstrela {
+        // Salvar estado atual no histórico antes de fazer modificações
+        self.salvar_estado_no_historico();
+        
         self.passo_atual += 1;
         println!("\n=== PASSO {} ===", self.passo_atual);
         
@@ -901,6 +931,9 @@ impl SolucionadorAEstrela {
         self.passo_atual = 0;
         self.vizinhos_sendo_analisados.clear();
         
+        // Limpar histórico de estados
+        self.historico_estados.clear();
+        
         // Reconstruir fronteira inicial
         self.fronteira.clear();
         self.custos_g_viagem_mapa.clear();
@@ -924,5 +957,68 @@ impl SolucionadorAEstrela {
         });
         
         self.custos_g_viagem_mapa.insert((self.id_inicio, self.linha_de_partida_busca), custo_g_viagem_inicial);
+    }
+    
+    // Métodos para controle de histórico e navegação de passos
+    
+    /// Salva o estado atual no histórico antes de fazer modificações
+    fn salvar_estado_no_historico(&mut self) {
+        let snapshot = SnapshotEstado {
+            fronteira: self.fronteira.clone(),
+            explorados: self.explorados.clone(),
+            custos_g_viagem_mapa: self.custos_g_viagem_mapa.clone(),
+            predecessores_info: self.predecessores_info.clone(),
+            status_estacoes: self.status_estacoes.clone(),
+            estacao_sendo_explorada_no_momento: self.estacao_sendo_explorada_no_momento,
+            passo_atual: self.passo_atual,
+            vizinhos_sendo_analisados: self.vizinhos_sendo_analisados.clone(),
+            estado_atual: self.estado_atual.clone(),
+            no_atual: self.no_atual.clone(),
+            vizinhos_atuais: self.vizinhos_atuais.clone(),
+            indice_vizinho_atual: self.indice_vizinho_atual,
+            vizinhos_adicionados_neste_passo: self.vizinhos_adicionados_neste_passo,
+            ultima_analise: self.ultima_analise.clone(),
+        };
+        
+        self.historico_estados.push(snapshot);
+        
+        // Limitar o tamanho do histórico para evitar uso excessivo de memória
+        if self.historico_estados.len() > self.max_historico {
+            self.historico_estados.remove(0);
+        }
+    }
+    
+    /// Restaura o estado anterior a partir do histórico
+    pub fn passo_anterior(&mut self) -> bool {
+        if let Some(snapshot) = self.historico_estados.pop() {
+            self.fronteira = snapshot.fronteira;
+            self.explorados = snapshot.explorados;
+            self.custos_g_viagem_mapa = snapshot.custos_g_viagem_mapa;
+            self.predecessores_info = snapshot.predecessores_info;
+            self.status_estacoes = snapshot.status_estacoes;
+            self.estacao_sendo_explorada_no_momento = snapshot.estacao_sendo_explorada_no_momento;
+            self.passo_atual = snapshot.passo_atual;
+            self.vizinhos_sendo_analisados = snapshot.vizinhos_sendo_analisados;
+            self.estado_atual = snapshot.estado_atual;
+            self.no_atual = snapshot.no_atual;
+            self.vizinhos_atuais = snapshot.vizinhos_atuais;
+            self.indice_vizinho_atual = snapshot.indice_vizinho_atual;
+            self.vizinhos_adicionados_neste_passo = snapshot.vizinhos_adicionados_neste_passo;
+            self.ultima_analise = snapshot.ultima_analise;
+            
+            true // Sucesso ao voltar
+        } else {
+            false // Não há estados anteriores
+        }
+    }
+    
+    /// Verifica se é possível voltar um passo
+    pub fn pode_voltar_passo(&self) -> bool {
+        !self.historico_estados.is_empty()
+    }
+    
+    /// Obtém o número de passos no histórico
+    pub fn numero_passos_historico(&self) -> usize {
+        self.historico_estados.len()
     }
 }
