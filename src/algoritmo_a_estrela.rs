@@ -189,14 +189,14 @@ impl SolucionadorAEstrela {
     // Executa um passo de análise de cada vez, priorizando rotas mais promissoras
     pub fn proximo_passo(&mut self) -> ResultadoPassoAEstrela {
         self.passo_atual += 1;
-        println!("\n🔄 === PASSO {} ===", self.passo_atual);
+        println!("\n=== PASSO {} ===", self.passo_atual);
         
         // ETAPA 1: Verificar se há estações pendentes para verificação de brick wall
         if !self.estacoes_para_verificar_brick_wall.is_empty() {
             let estacao_para_verificar = *self.estacoes_para_verificar_brick_wall.iter().next().unwrap();
             self.estacoes_para_verificar_brick_wall.remove(&estacao_para_verificar);
             
-            println!("🔍 VERIFICANDO BRICK WALL: Analisando se E{} é um beco sem saída", estacao_para_verificar + 1);
+            println!("VERIFICANDO BRICK WALL: Analisando se E{} é um beco sem saída", estacao_para_verificar + 1);
             
             // Atualizar status visual para "analisando brick wall"
             self.status_estacoes.insert(estacao_para_verificar, StatusEstacao::AnalisandoBrickWall);
@@ -209,7 +209,7 @@ impl SolucionadorAEstrela {
                     .collect();
                 
                 if vizinhos_validos.is_empty() {
-                    println!("  🧱 BRICK WALL CONFIRMADO: E{} não tem vizinhos válidos!", estacao_para_verificar + 1);
+                    println!("  BRICK WALL CONFIRMADO: E{} não tem vizinhos válidos!", estacao_para_verificar + 1);
                     
                     // Marcar como brick wall
                     self.estacoes_brick_wall.insert(estacao_para_verificar);
@@ -238,7 +238,7 @@ impl SolucionadorAEstrela {
                     
                     return ResultadoPassoAEstrela::EmProgresso;
                 } else {
-                    println!("  ✅ E{} ainda tem vizinhos válidos, não é brick wall", estacao_para_verificar + 1);
+                    println!("  E{} ainda tem vizinhos válidos, não é brick wall", estacao_para_verificar + 1);
                     self.status_estacoes.insert(estacao_para_verificar, StatusEstacao::Explorada);
                 }
             }
@@ -246,7 +246,7 @@ impl SolucionadorAEstrela {
         
         // ETAPA 2: Verificar se estamos voltando de um brick wall
         if let Some(estacao_anterior) = self.estacao_anterior_brick_wall {
-            println!("🔙 VOLTANDO: Retornando para E{} após detectar brick wall", estacao_anterior + 1);
+            println!("VOLTANDO: Retornando para E{} após detectar brick wall", estacao_anterior + 1);
             self.status_estacoes.insert(estacao_anterior, StatusEstacao::VoltandoParaAnterior);
             self.estacao_anterior_brick_wall = None;
             return ResultadoPassoAEstrela::EmProgresso;
@@ -254,7 +254,7 @@ impl SolucionadorAEstrela {
         
         // ETAPA 3: Continuar com o algoritmo normal
         if let Some(no_da_fronteira_atual) = self.fronteira.pop() {
-            println!("📍 SELECIONANDO: Estação E{} (f={:.1}, g={:.1}, h={:.1})", 
+            println!("SELECIONANDO: Estação E{} (f={:.1}, g={:.1}, h={:.1})", 
                      no_da_fronteira_atual.id_estacao + 1,
                      no_da_fronteira_atual.custo_f,
                      no_da_fronteira_atual.custo_g_viagem,
@@ -268,7 +268,7 @@ impl SolucionadorAEstrela {
             
             // Ignorar estações já exploradas
             if self.explorados.contains(&no_da_fronteira_atual.id_estacao) {
-                println!("  ⏭️ Estação E{} já explorada, pulando.", no_da_fronteira_atual.id_estacao + 1);
+                println!("  Estação E{} já explorada, pulando.", no_da_fronteira_atual.id_estacao + 1);
                 return ResultadoPassoAEstrela::EmProgresso;
             }
             
@@ -395,7 +395,7 @@ impl SolucionadorAEstrela {
                         .collect();
                     
                     if vizinhos_validos.is_empty() {
-                        println!("  📋 MARCANDO E{} para verificação de brick wall no próximo passo", 
+                        println!("  MARCANDO E{} para verificação de brick wall no próximo passo", 
                                 no_da_fronteira_atual.id_estacao + 1);
                         self.estacoes_para_verificar_brick_wall.insert(no_da_fronteira_atual.id_estacao);
                     }
