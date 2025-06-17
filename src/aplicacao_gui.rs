@@ -43,8 +43,9 @@ pub struct MinhaAplicacaoGUI {
     detalhes_analise_ui: Vec<String>, // Detalhes da análise para exibição
     vizinhos_sendo_analisados_ui: HashSet<IdEstacao>, // Vizinhos da estação sendo expandida
     zoom_nivel: f32,
-    mostrar_linha_atual: bool,
     mostrar_tempos_conexao: bool, // Nova opção para controlar a visibilidade dos tempos
+    mostrar_marcadores_estacoes: bool, // Controlar a visibilidade dos marcadores de status
+    mostrar_ids_estacoes: bool, // Mostrar IDs das estações
     offset_rolagem: Vec2,
     arrastando: bool,
     ultima_posicao_mouse: Option<Pos2>,
@@ -106,8 +107,9 @@ impl MinhaAplicacaoGUI {
             detalhes_analise_ui: Vec::new(), // Inicializamos vazio
             vizinhos_sendo_analisados_ui: HashSet::new(), // Inicializamos vazio
             zoom_nivel: 0.70, // Zoom inicial mais afastado para melhor visualização
-            mostrar_linha_atual: true,
             mostrar_tempos_conexao: true, // Iniciar com os tempos visíveis
+            mostrar_marcadores_estacoes: true, // Iniciar com marcadores visíveis
+            mostrar_ids_estacoes: true, // IDs das estações visíveis por padrão
             offset_rolagem: Vec2::new(0.0, 0.0), // Inicializa centralizado
             arrastando: false,
             ultima_posicao_mouse: None,
@@ -1253,6 +1255,10 @@ impl MinhaAplicacaoGUI {
     }
 
     fn desenhar_marcadores_estacoes(&self, painter: &egui::Painter, rect_desenho: egui::Rect, grafo: &GrafoMetro, _ui: &egui::Ui) {
+        // Só desenha se a opção estiver habilitada
+        if !self.mostrar_marcadores_estacoes {
+            return;
+        }
         // Desenha marcadores visuais acima das estações para indicar seu status
         for (i, _estacao) in grafo.estacoes.iter().enumerate() {
             let pos = self.posicoes_estacoes_tela[i] * self.zoom_nivel + self.offset_rolagem + rect_desenho.min.to_vec2();
@@ -1479,13 +1485,15 @@ impl MinhaAplicacaoGUI {
             );
             
             // Adicionar o identificador da estação dentro do círculo (E1, E2, etc.)
-            painter.text(
-                pos,
-                egui::Align2::CENTER_CENTER,
-                &format!("E{}", i + 1), // Usando E1, E2, etc. para identificação mais clara
-                egui::FontId::proportional(12.5 * self.zoom_nivel),
-                Color32::WHITE,
-            );
+            if self.mostrar_ids_estacoes {
+                painter.text(
+                    pos,
+                    egui::Align2::CENTER_CENTER,
+                    &format!("E{}", i + 1), // Usando E1, E2, etc. para identificação mais clara
+                    egui::FontId::proportional(12.5 * self.zoom_nivel),
+                    Color32::WHITE,
+                );
+            }
             
             // Adicionar o nome da estação abaixo do círculo - apenas para estações relevantes
             // Só mostra nomes das estações que fazem parte da solução ou que são início/fim
@@ -1946,88 +1954,56 @@ impl eframe::App for MinhaAplicacaoGUI {
                         .strong());
                     ui.add_space(5.0);
                     
-                    // Botão "Passo Anterior" - só habilitado se houver histórico
+                    // Obter informações do solucionador
                     let (pode_voltar, num_passos_historico) = if let Some(ref solucionador) = self.solucionador_a_estrela {
                         (solucionador.pode_voltar_passo(), solucionador.numero_passos_historico())
                     } else {
                         (false, 0)
                     };
                     
-                    // Layout horizontal para os botões de navegação com espaçamento igual
+                    // Botões de navegação lado a lado
                     ui.horizontal(|ui| {
-                        // Calcular largura dos botões (metade do tamanho padrão menos espaçamento)
-                        let largura_botao = (tamanho_botao.x - 5.0) / 2.0;
-                        let tamanho_botao_nav = egui::Vec2::new(largura_botao, tamanho_botao.y);
+                        let largura_nav = (tamanho_botao.x - 4.0) / 2.0;
+                        let tamanho_nav = egui::Vec2::new(largura_nav, tamanho_botao.y);
                         
-                        // Botão Anterior com design minimalista e contador
-                        let texto_anterior = if pode_voltar && num_passos_historico > 0 {
+                        // Botão Anterior
+                        let texto_ant = if num_passos_historico > 0 {
                             format!("◀ Anterior ({})", num_passos_historico)
                         } else {
                             "◀ Anterior".to_string()
                         };
                         
-                        let mut botao_anterior = egui::Button::new(egui::RichText::new(texto_anterior)
-                            .size(11.0));
+                        let btn_ant = egui::Button::new(egui::RichText::new(texto_ant).size(10.5))
+                            .fill(if pode_voltar { Color32::from_rgb(45, 55, 75) } else { Color32::from_rgb(35, 35, 35) })
+                            .stroke(egui::Stroke::new(1.5, if pode_voltar { Color32::from_rgb(100, 120, 160) } else { Color32::from_rgb(60, 60, 60) }));
                         
-                        if pode_voltar {
-                            botao_anterior = botao_anterior
-                                .fill(Color32::from_rgb(45, 55, 75))
-                                .stroke(egui::Stroke::new(1.5, Color32::from_rgb(100, 120, 160)));
-                        } else {
-                            botao_anterior = botao_anterior
-                                .fill(Color32::from_rgb(35, 35, 35))
-                                .stroke(egui::Stroke::new(1.0, Color32::from_rgb(60, 60, 60)));
-                        }
-                        
-                        if ui.add_sized(tamanho_botao_nav, botao_anterior).clicked() && pode_voltar {
-                            let sucesso_volta = if let Some(ref mut solucionador) = self.solucionador_a_estrela {
-                                solucionador.passo_anterior()
-                            } else {
-                                false
-                            };
+                        if ui.add_sized(tamanho_nav, btn_ant).clicked() && pode_voltar {
+                            let ok = if let Some(ref mut sol) = self.solucionador_a_estrela {
+                                sol.passo_anterior()
+                            } else { false };
                             
-                            if sucesso_volta {
-                                // Atualizar estado visual da GUI
+                            if ok {
                                 self.atualizar_estado_visual_do_solucionador();
-                                let num_passos = if let Some(ref solucionador) = self.solucionador_a_estrela {
-                                    solucionador.numero_passos_historico()
-                                } else {
-                                    0
-                                };
-                                self.mensagem_status_ui = format!(
-                                    "⬅ Voltou um passo. {} passos restantes no histórico", 
-                                    num_passos
-                                );
+                                let rest = if let Some(ref sol) = self.solucionador_a_estrela { sol.numero_passos_historico() } else { 0 };
+                                self.mensagem_status_ui = format!("⬅ Voltou um passo. {} restantes", rest);
                             } else {
-                                self.mensagem_status_ui = "❌ Não é possível voltar: já está no início.".to_string();
+                                self.mensagem_status_ui = "❌ Não é possível voltar mais.".to_string();
                             }
                         }
                         
-                        ui.add_space(3.0);
+                        ui.add_space(4.0);
                         
-                        // Botão Próximo com design minimalista (mesma cor dos outros)
-                        let botao_proximo = egui::Button::new(egui::RichText::new("Próximo ▶")
-                            .size(11.0))
+                        // Botão Próximo
+                        let btn_prox = egui::Button::new(egui::RichText::new("Próximo ▶").size(10.5))
                             .fill(Color32::from_rgb(45, 55, 75))
                             .stroke(egui::Stroke::new(1.5, Color32::from_rgb(100, 120, 160)));
                         
-                        if ui.add_sized(tamanho_botao_nav, botao_proximo).clicked() {
+                        if ui.add_sized(tamanho_nav, btn_prox).clicked() {
                             self.executar_proximo_passo_a_estrela();
                         }
                     });
                     
-                    // Pequena informação sobre o estado do histórico
-                    if num_passos_historico > 0 {
-                        ui.add_space(2.0);
-                        ui.horizontal(|ui| {
-                            ui.add_space(10.0);
-                            ui.label(egui::RichText::new(format!("📚 {} passos no histórico", num_passos_historico))
-                                .size(10.0)
-                                .color(Color32::from_rgb(150, 150, 200)));
-                        });
-                    }
-                    
-                    ui.add_space(3.0);
+                    ui.add_space(5.0);
                     
                     if ui.add_sized(tamanho_botao, egui::Button::new("Executar Tudo")).clicked() {
                         for _i in 0..NUMERO_ESTACOES * NUMERO_ESTACOES * 2 {
@@ -2170,7 +2146,7 @@ impl eframe::App for MinhaAplicacaoGUI {
                     .strong());
                 ui.add_space(5.0);
                 
-                // Slider de zoom com tamanho padronizado
+                // Controle de zoom
                 ui.horizontal(|ui| {
                     ui.label("Zoom:");
                     ui.add_sized([140.0, 20.0], egui::Slider::new(&mut self.zoom_nivel, 0.5..=2.0)
@@ -2178,11 +2154,20 @@ impl eframe::App for MinhaAplicacaoGUI {
                         .step_by(0.1));
                 });
                 
-                ui.add_space(3.0);
+                ui.add_space(5.0);
                 
-                // Checkboxes organizados
-                ui.checkbox(&mut self.mostrar_linha_atual, "Mostrar Linha Atual");
-                ui.checkbox(&mut self.mostrar_tempos_conexao, "Mostrar Tempos entre Estações");
+                // Opções de visualização organizadas
+                ui.label(egui::RichText::new("Exibir:")
+                    .size(12.0)
+                    .color(Color32::LIGHT_GRAY));
+                
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.mostrar_tempos_conexao, "⏱ Tempos");
+                    ui.add_space(10.0);
+                    ui.checkbox(&mut self.mostrar_marcadores_estacoes, "🏷 Status");
+                    ui.add_space(10.0);
+                    ui.checkbox(&mut self.mostrar_ids_estacoes, "🏷 IDs");
+                });
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -2205,30 +2190,6 @@ impl eframe::App for MinhaAplicacaoGUI {
                 }
 
                 painter.rect_filled(rect_desenho, 0.0, Color32::from_gray(30));
-
-                if self.zoom_nivel > 1.2 {
-                    let tamanho_grade = 50.0 * self.zoom_nivel;
-                    let cor_grade = Color32::from_gray(45);
-                    let tracos = Stroke::new(1.0, cor_grade);
-
-                    let mut x = (rect_desenho.min.x + self.offset_rolagem.x) % tamanho_grade;
-                    while x < rect_desenho.max.x {
-                        painter.line_segment(
-                            [Pos2::new(x, rect_desenho.min.y), Pos2::new(x, rect_desenho.max.y)],
-                            tracos
-                        );
-                        x += tamanho_grade;
-                    }
-
-                    let mut y = (rect_desenho.min.y + self.offset_rolagem.y) % tamanho_grade;
-                    while y < rect_desenho.max.y {
-                        painter.line_segment(
-                            [Pos2::new(rect_desenho.min.x, y), Pos2::new(rect_desenho.max.x, y)],
-                            tracos
-                        );
-                        y += tamanho_grade;
-                    }
-                }
 
                 // First get a clone of the Arc to avoid borrow checker issues
                 let grafo_clone = match &self.grafo_metro {
