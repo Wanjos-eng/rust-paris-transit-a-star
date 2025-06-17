@@ -1947,19 +1947,39 @@ impl eframe::App for MinhaAplicacaoGUI {
                     ui.add_space(5.0);
                     
                     // Botão "Passo Anterior" - só habilitado se houver histórico
-                    let pode_voltar = if let Some(ref solucionador) = self.solucionador_a_estrela {
-                        solucionador.pode_voltar_passo()
+                    let (pode_voltar, num_passos_historico) = if let Some(ref solucionador) = self.solucionador_a_estrela {
+                        (solucionador.pode_voltar_passo(), solucionador.numero_passos_historico())
                     } else {
-                        false
+                        (false, 0)
                     };
                     
+                    // Layout horizontal para os botões de navegação com espaçamento igual
                     ui.horizontal(|ui| {
-                        let mut botao_anterior = egui::Button::new("← Passo Anterior");
-                        if !pode_voltar {
-                            botao_anterior = botao_anterior.fill(Color32::from_gray(60));
+                        // Calcular largura dos botões (metade do tamanho padrão menos espaçamento)
+                        let largura_botao = (tamanho_botao.x - 5.0) / 2.0;
+                        let tamanho_botao_nav = egui::Vec2::new(largura_botao, tamanho_botao.y);
+                        
+                        // Botão Anterior com design minimalista e contador
+                        let texto_anterior = if pode_voltar && num_passos_historico > 0 {
+                            format!("◀ Anterior ({})", num_passos_historico)
+                        } else {
+                            "◀ Anterior".to_string()
+                        };
+                        
+                        let mut botao_anterior = egui::Button::new(egui::RichText::new(texto_anterior)
+                            .size(11.0));
+                        
+                        if pode_voltar {
+                            botao_anterior = botao_anterior
+                                .fill(Color32::from_rgb(45, 55, 75))
+                                .stroke(egui::Stroke::new(1.5, Color32::from_rgb(100, 120, 160)));
+                        } else {
+                            botao_anterior = botao_anterior
+                                .fill(Color32::from_rgb(35, 35, 35))
+                                .stroke(egui::Stroke::new(1.0, Color32::from_rgb(60, 60, 60)));
                         }
                         
-                        if ui.add_sized([95.0, 32.0], botao_anterior).clicked() && pode_voltar {
+                        if ui.add_sized(tamanho_botao_nav, botao_anterior).clicked() && pode_voltar {
                             let sucesso_volta = if let Some(ref mut solucionador) = self.solucionador_a_estrela {
                                 solucionador.passo_anterior()
                             } else {
@@ -1975,20 +1995,37 @@ impl eframe::App for MinhaAplicacaoGUI {
                                     0
                                 };
                                 self.mensagem_status_ui = format!(
-                                    "Voltou para o passo anterior. Histórico: {} passos", 
+                                    "⬅ Voltou um passo. {} passos restantes no histórico", 
                                     num_passos
                                 );
                             } else {
-                                self.mensagem_status_ui = "Não foi possível voltar: já está no início.".to_string();
+                                self.mensagem_status_ui = "❌ Não é possível voltar: já está no início.".to_string();
                             }
                         }
                         
-                        ui.add_space(5.0);
+                        ui.add_space(3.0);
                         
-                        if ui.add_sized([95.0, 32.0], egui::Button::new("Próximo Passo →")).clicked() {
+                        // Botão Próximo com design minimalista (mesma cor dos outros)
+                        let botao_proximo = egui::Button::new(egui::RichText::new("Próximo ▶")
+                            .size(11.0))
+                            .fill(Color32::from_rgb(45, 55, 75))
+                            .stroke(egui::Stroke::new(1.5, Color32::from_rgb(100, 120, 160)));
+                        
+                        if ui.add_sized(tamanho_botao_nav, botao_proximo).clicked() {
                             self.executar_proximo_passo_a_estrela();
                         }
                     });
+                    
+                    // Pequena informação sobre o estado do histórico
+                    if num_passos_historico > 0 {
+                        ui.add_space(2.0);
+                        ui.horizontal(|ui| {
+                            ui.add_space(10.0);
+                            ui.label(egui::RichText::new(format!("📚 {} passos no histórico", num_passos_historico))
+                                .size(10.0)
+                                .color(Color32::from_rgb(150, 150, 200)));
+                        });
+                    }
                     
                     ui.add_space(3.0);
                     
