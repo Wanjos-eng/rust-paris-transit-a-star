@@ -65,22 +65,24 @@ fn mostrar_seletores_estacao(app: &mut MinhaAplicacaoGUI, ui: &mut egui::Ui) {
 }
 
 fn mostrar_botoes_controle_principal(app: &mut MinhaAplicacaoGUI, ui: &mut egui::Ui) {
-    let tamanho_botao = egui::Vec2::new(200.0, 32.0);
+    // Aumentamos a largura para acomodar os botões de navegação lado a lado
+    let tamanho_botao_padrao = egui::Vec2::new(220.0, 32.0);
     
-    if ui.add_sized(tamanho_botao, egui::Button::new("Iniciar/Reiniciar Busca")).clicked() {
+    if ui.add_sized(tamanho_botao_padrao, egui::Button::new("Iniciar/Reiniciar Busca")).clicked() {
         state_manager::iniciar_busca_a_estrela(app);
     }
     
     ui.add_space(3.0);
     
-    if ui.add_sized(tamanho_botao, egui::Button::new("Limpar Tudo")).clicked() {
+    if ui.add_sized(tamanho_botao_padrao, egui::Button::new("Limpar Tudo")).clicked() {
         state_manager::limpar_estado_visual(app);
         app.mensagem_status_ui = "Estado limpo. Selecione início/fim e inicie nova busca.".to_string();
     }
 }
 
 fn mostrar_controles_passo_a_passo(app: &mut MinhaAplicacaoGUI, ui: &mut egui::Ui) {
-    let tamanho_botao = egui::Vec2::new(200.0, 32.0);
+    // Usar a mesma largura dos botões principais
+    let tamanho_botao_padrao = egui::Vec2::new(220.0, 32.0);
     
     ui.add_space(8.0);
     ui.label(egui::RichText::new("Execução Passo a Passo")
@@ -95,10 +97,10 @@ fn mostrar_controles_passo_a_passo(app: &mut MinhaAplicacaoGUI, ui: &mut egui::U
         (false, 0)
     };
     
-    // Botões de navegação lado a lado
+    // Botões de navegação lado a lado - mesma largura total que outros botões
     ui.horizontal(|ui| {
-        let largura_nav = (tamanho_botao.x - 4.0) / 2.0;
-        let tamanho_nav = egui::Vec2::new(largura_nav, tamanho_botao.y);
+        // Cada botão de navegação terá exatamente metade da largura padrão
+        let tamanho_nav = egui::Vec2::new(108.0, 32.0); // 220/2 = 110, menos 2 para espaçamento
         
         // Botão Anterior
         let texto_ant = if num_passos_historico > 0 {
@@ -139,7 +141,7 @@ fn mostrar_controles_passo_a_passo(app: &mut MinhaAplicacaoGUI, ui: &mut egui::U
     
     ui.add_space(5.0);
     
-    if ui.add_sized(tamanho_botao, egui::Button::new("Executar Tudo")).clicked() {
+    if ui.add_sized(tamanho_botao_padrao, egui::Button::new("Executar Tudo")).clicked() {
         for _i in 0..NUMERO_ESTACOES * NUMERO_ESTACOES * 2 {
             if app.solucionador_a_estrela.is_none() {
                 break;
