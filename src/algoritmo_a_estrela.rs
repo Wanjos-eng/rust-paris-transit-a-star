@@ -574,15 +574,7 @@ impl SolucionadorAEstrela {
                     // Adicionar à lista de vizinhos sendo analisados
                     self.vizinhos_sendo_analisados.insert(id_vizinho);
                     
-                    // Pula vizinhos já completamente explorados - CORRIGIDO
-                    let estado_vizinho = (id_vizinho, Some(conexao.cor_linha));
-                    if self.explorados.contains(&estado_vizinho) {
-                        println!("    Ignorando E{}: já explorado", id_vizinho + 1);
-                        vizinhos_analisados.push(format!("E{}: já explorado", id_vizinho + 1));
-                        continue;
-                    }
-                    
-                    // Calcular custos para este vizinho
+                    // Calcular custos para este vizinho (sempre, para fins educativos)
                     let custo_baldeacao = if let Some(linha_atual) = no_da_fronteira_atual.linha_chegada {
                         if linha_atual != conexao.cor_linha {
                             println!("      Adicionando custo de baldeação: +{}min", TEMPO_BALDEACAO_MINUTOS);
@@ -598,6 +590,15 @@ impl SolucionadorAEstrela {
                     let custo_h = self.grafo.obter_tempo_heuristico_minutos(id_vizinho, self.id_objetivo)
                         .unwrap_or(0.0);
                     let custo_f = custo_g_novo + custo_h;
+                    
+                    // Verificar se já foi explorado - mas incluir valores para fins educativos
+                    let estado_vizinho = (id_vizinho, Some(conexao.cor_linha));
+                    if self.explorados.contains(&estado_vizinho) {
+                        println!("    Ignorando E{}: já explorado", id_vizinho + 1);
+                        vizinhos_analisados.push(format!("E{}: g={:.1}, h={:.1}, f={:.1} - JÁ EXPLORADO", 
+                                                         id_vizinho + 1, custo_g_novo, custo_h, custo_f));
+                        continue;
+                    }
                     
                     println!("      Analisando E{}: g={:.1}, h={:.1}, f={:.1}", 
                              id_vizinho + 1, custo_g_novo, custo_h, custo_f);
@@ -649,7 +650,8 @@ impl SolucionadorAEstrela {
                         vizinhos_analisados.push(format!("E{}: g={:.1}, h={:.1}, f={:.1} - ADICIONADO", 
                                                          id_vizinho + 1, custo_g_novo, custo_h, custo_f));
                     } else {
-                        vizinhos_analisados.push(format!("E{}: já tem caminho melhor", id_vizinho + 1));
+                        vizinhos_analisados.push(format!("E{}: g={:.1}, h={:.1}, f={:.1} - CAMINHO MELHOR JÁ EXISTE", 
+                                                         id_vizinho + 1, custo_g_novo, custo_h, custo_f));
                     }
                 }
             }
