@@ -72,6 +72,68 @@ pub enum ResultadoPassoAEstrela {
     Erro(String),
 }
 
+// Novo enum para eventos visuais detalhados
+#[derive(Debug, Clone)]
+pub enum EventoVisual {
+    NoEscolhidoDaFronteira {
+        id_estacao: IdEstacao,
+        custo_f: f32,
+        custo_g: f32,
+        custo_h: f32,
+        caminho_ate_aqui: Vec<IdEstacao>,
+    },
+    VerificandoSeEhObjetivo {
+        id_estacao: IdEstacao,
+        eh_objetivo: bool,
+    },
+    NoJaExplorado {
+        id_estacao: IdEstacao,
+    },
+    InicioDaExpansaoDeNo {
+        id_estacao: IdEstacao,
+        numero_vizinhos: usize,
+    },
+    AvaliandoVizinho {
+        id_estacao_atual: IdEstacao,
+        id_vizinho: IdEstacao,
+        linha_conexao: CorLinha,
+        tempo_conexao: f32,
+        custo_baldeacao: f32,
+        custo_g_novo: f32,
+        custo_h: f32,
+        custo_f_novo: f32,
+    },
+    VizinhoJaExplorado {
+        id_vizinho: IdEstacao,
+    },
+    VizinhoJaTemCaminhoMelhor {
+        id_vizinho: IdEstacao,
+        custo_g_existente: f32,
+        custo_g_novo: f32,
+    },
+    VizinhoAdicionadoNaFronteira {
+        id_vizinho: IdEstacao,
+        custo_f: f32,
+        custo_g: f32,
+        custo_h: f32,
+        novo_caminho: Vec<IdEstacao>,
+    },
+    FimDaExpansaoDeNo {
+        id_estacao: IdEstacao,
+        vizinhos_adicionados: usize,
+        tamanho_fronteira: usize,
+    },
+    CaminhoEncontrado {
+        info_caminho: InfoCaminho,
+    },
+    NenhumCaminho,
+    AlgoritmoInicializado {
+        id_inicio: IdEstacao,
+        id_objetivo: IdEstacao,
+        custo_h_inicial: f32,
+    },
+}
+
 // Novo struct para detalhes da análise
 #[derive(Debug, Clone)]
 pub struct DetalhesAnalise {
@@ -89,6 +151,20 @@ pub enum StatusEstacao {
     Explorada,                  // Completamente processada
 }
 
+// Estados do algoritmo para controlar o fluxo de eventos
+#[derive(Debug, Clone, PartialEq)]
+pub enum EstadoAlgoritmo {
+    Inicializado,
+    SelecionandoNoDaFronteira,
+    VerificandoObjetivo,
+    VerificandoSeJaExplorado,
+    IniciandoExpansao,
+    AvaliandoVizinho { indice_vizinho: usize },
+    FinalizandoExpansao,
+    CaminhoEncontrado,
+    SemCaminho,
+}
+
 #[derive(Debug)]
 pub struct SolucionadorAEstrela {
     grafo: Arc<GrafoMetro>,
@@ -96,14 +172,21 @@ pub struct SolucionadorAEstrela {
     linha_de_partida_busca: Option<CorLinha>,
     id_objetivo: IdEstacao,
     pub fronteira: BinaryHeap<EstadoNoFronteira>,
-    pub explorados: HashSet<IdEstacao>, 
-    custos_g_viagem_mapa: HashMap<IdEstacao, f32>, 
+    pub explorados: HashSet<(IdEstacao, Option<CorLinha>)>, // Estado = (estação, linha)
+    custos_g_viagem_mapa: HashMap<(IdEstacao, Option<CorLinha>), f32>, // Estado completo como chave
     predecessores_info: HashMap<IdEstacao, (IdEstacao, Option<CorLinha>, CorLinha)>,
     pub ultima_analise: Option<DetalhesAnalise>, // Novo campo para armazenar detalhes da última análise
     pub status_estacoes: HashMap<IdEstacao, StatusEstacao>, // Status de cada estação
     pub estacao_sendo_explorada_no_momento: Option<IdEstacao>, // Estação que está sendo explorada neste momento
     pub passo_atual: usize, // Contador de passos para controle didático
     pub vizinhos_sendo_analisados: HashSet<IdEstacao>, // Vizinhos sendo analisados no passo atual
+    
+    // Novos campos para controle de estado do algoritmo
+    estado_atual: EstadoAlgoritmo,
+    no_atual: Option<EstadoNoFronteira>,
+    vizinhos_atuais: Vec<crate::grafo_metro::Conexao>,
+    indice_vizinho_atual: usize,
+    vizinhos_adicionados_neste_passo: usize,
 }
 
 impl SolucionadorAEstrela {
@@ -146,7 +229,7 @@ impl SolucionadorAEstrela {
             caminho: caminho_inicial, // Caminho inicial contém só a origem
         });
         
-        custos_g_map.insert(id_inicio_param, custo_g_viagem_inicial);
+        custos_g_map.insert((id_inicio_param, linha_inicial_opcional), custo_g_viagem_inicial);
 
         Self {
             grafo: grafo_compartilhado,
@@ -162,12 +245,259 @@ impl SolucionadorAEstrela {
             estacao_sendo_explorada_no_momento: None, // Inicializar como None
             passo_atual: 0, // Inicializar contador de passos
             vizinhos_sendo_analisados: HashSet::new(), // Inicializar vazio
+            
+            // Novos campos para controle de eventos
+            estado_atual: EstadoAlgoritmo::Inicializado,
+            no_atual: None,
+            vizinhos_atuais: Vec::new(),
+            indice_vizinho_atual: 0,
+            vizinhos_adicionados_neste_passo: 0,
         }
     }
 
-    // PARTE 2: BUSCA INTELIGENTE - Núcleo do algoritmo A* (versão didática)
-    // Esta função explora sistematicamente as possibilidades para encontrar a rota mais eficiente
-    // Executa um passo de análise de cada vez, priorizando rotas mais promissoras
+    // PARTE 2: BUSCA INTELIGENTE - Núcleo do algoritmo A* (versão orientada a eventos)
+    // Esta função gera um evento visual de cada vez, permitindo controle fino da visualização
+    // A GUI chama este método a cada clique do usuário para obter o próximo micro-passo
+    pub fn proximo_evento(&mut self) -> EventoVisual {
+        match &self.estado_atual {
+            EstadoAlgoritmo::Inicializado => {
+                let custo_h_inicial = self.grafo
+                    .obter_tempo_heuristico_minutos(self.id_inicio, self.id_objetivo)
+                    .unwrap_or(0.0);
+                
+                self.estado_atual = EstadoAlgoritmo::SelecionandoNoDaFronteira;
+                
+                EventoVisual::AlgoritmoInicializado {
+                    id_inicio: self.id_inicio,
+                    id_objetivo: self.id_objetivo,
+                    custo_h_inicial,
+                }
+            },
+            
+            EstadoAlgoritmo::SelecionandoNoDaFronteira => {
+                if let Some(no_da_fronteira_atual) = self.fronteira.pop() {
+                    let custo_h = no_da_fronteira_atual.custo_f - no_da_fronteira_atual.custo_g_viagem;
+                    
+                    // Armazenar o nó atual para próximos passos
+                    self.no_atual = Some(no_da_fronteira_atual.clone());
+                    self.estado_atual = EstadoAlgoritmo::VerificandoObjetivo;
+                    
+                    EventoVisual::NoEscolhidoDaFronteira {
+                        id_estacao: no_da_fronteira_atual.id_estacao,
+                        custo_f: no_da_fronteira_atual.custo_f,
+                        custo_g: no_da_fronteira_atual.custo_g_viagem,
+                        custo_h,
+                        caminho_ate_aqui: no_da_fronteira_atual.caminho.clone(),
+                    }
+                } else {
+                    self.estado_atual = EstadoAlgoritmo::SemCaminho;
+                    EventoVisual::NenhumCaminho
+                }
+            },
+            
+            EstadoAlgoritmo::VerificandoObjetivo => {
+                let no_atual = self.no_atual.as_ref().unwrap();
+                let eh_objetivo = no_atual.id_estacao == self.id_objetivo;
+                
+                if eh_objetivo {
+                    self.estado_atual = EstadoAlgoritmo::CaminhoEncontrado;
+                } else {
+                    self.estado_atual = EstadoAlgoritmo::VerificandoSeJaExplorado;
+                }
+                
+                EventoVisual::VerificandoSeEhObjetivo {
+                    id_estacao: no_atual.id_estacao,
+                    eh_objetivo,
+                }
+            },
+            
+            EstadoAlgoritmo::VerificandoSeJaExplorado => {
+                let no_atual = self.no_atual.as_ref().unwrap();
+                let estado_atual = (no_atual.id_estacao, no_atual.linha_chegada);
+                let ja_explorado = self.explorados.contains(&estado_atual);
+                
+                if ja_explorado {
+                    // Pular para seleção do próximo nó
+                    self.estado_atual = EstadoAlgoritmo::SelecionandoNoDaFronteira;
+                    EventoVisual::NoJaExplorado {
+                        id_estacao: no_atual.id_estacao,
+                    }
+                } else {
+                    // Marcar como explorado e preparar para expansão
+                    self.explorados.insert(estado_atual);
+                    self.status_estacoes.insert(no_atual.id_estacao, StatusEstacao::SelecionadaParaExpansao);
+                    self.estacao_sendo_explorada_no_momento = Some(no_atual.id_estacao);
+                    
+                    // Preparar lista de vizinhos
+                    if let Some(conexoes) = self.grafo.lista_adjacencia.get(no_atual.id_estacao) {
+                        self.vizinhos_atuais = conexoes.clone();
+                    } else {
+                        self.vizinhos_atuais = Vec::new();
+                    }
+                    self.indice_vizinho_atual = 0;
+                    self.vizinhos_adicionados_neste_passo = 0;
+                    
+                    self.estado_atual = EstadoAlgoritmo::IniciandoExpansao;
+                    
+                    EventoVisual::InicioDaExpansaoDeNo {
+                        id_estacao: no_atual.id_estacao,
+                        numero_vizinhos: self.vizinhos_atuais.len(),
+                    }
+                }
+            },
+            
+            EstadoAlgoritmo::IniciandoExpansao => {
+                // Atualizar status visual
+                let no_atual = self.no_atual.as_ref().unwrap();
+                self.status_estacoes.insert(no_atual.id_estacao, StatusEstacao::ExpandindoVizinhos);
+                
+                if self.vizinhos_atuais.is_empty() {
+                    self.estado_atual = EstadoAlgoritmo::FinalizandoExpansao;
+                    return self.proximo_evento(); // Chama recursivamente para ir direto ao fim da expansão
+                } else {
+                    self.estado_atual = EstadoAlgoritmo::AvaliandoVizinho { indice_vizinho: 0 };
+                    return self.proximo_evento(); // Chama recursivamente para avaliar o primeiro vizinho
+                }
+            },
+            
+            EstadoAlgoritmo::AvaliandoVizinho { indice_vizinho } => {
+                let indice = *indice_vizinho;
+                
+                if indice >= self.vizinhos_atuais.len() {
+                    // Terminou de avaliar todos os vizinhos
+                    self.estado_atual = EstadoAlgoritmo::FinalizandoExpansao;
+                    return self.proximo_evento();
+                }
+                
+                let conexao = &self.vizinhos_atuais[indice];
+                let no_atual = self.no_atual.as_ref().unwrap();
+                let id_vizinho = conexao.para_estacao;
+                let estado_vizinho = (id_vizinho, Some(conexao.cor_linha));
+                
+                // Verificar se vizinho já foi explorado
+                if self.explorados.contains(&estado_vizinho) {
+                    self.estado_atual = EstadoAlgoritmo::AvaliandoVizinho { 
+                        indice_vizinho: indice + 1 
+                    };
+                    return EventoVisual::VizinhoJaExplorado { id_vizinho };
+                }
+                
+                // Calcular custos
+                let custo_baldeacao = if let Some(linha_atual) = no_atual.linha_chegada {
+                    if linha_atual != conexao.cor_linha {
+                        TEMPO_BALDEACAO_MINUTOS
+                    } else {
+                        0.0
+                    }
+                } else {
+                    0.0
+                };
+                
+                let custo_g_novo = no_atual.custo_g_viagem + conexao.tempo_minutos + custo_baldeacao;
+                let custo_h = self.grafo.obter_tempo_heuristico_minutos(id_vizinho, self.id_objetivo)
+                    .unwrap_or(0.0);
+                let custo_f_novo = custo_g_novo + custo_h;
+                
+                // Verificar se já existe caminho melhor - VERSÃO CORRIGIDA CONFORME LITERATURA A*
+                let mut ja_tem_melhor_caminho = false;
+                let mut custo_g_existente = f32::INFINITY;
+                
+                // 1. Verificar no mapa de custos g (nós já processados)
+                if let Some(&custo_g_registrado) = self.custos_g_viagem_mapa.get(&estado_vizinho) {
+                    if custo_g_registrado <= custo_g_novo {
+                        ja_tem_melhor_caminho = true;
+                        custo_g_existente = custo_g_registrado;
+                    }
+                }
+                
+                // 2. Verificar na fronteira (implementação otimizada)
+                // Nota: Em uma implementação mais eficiente, usaríamos um HashMap adicional 
+                // para mapear estados para nós na fronteira, evitando busca linear
+                if !ja_tem_melhor_caminho {
+                    for no_fronteira in self.fronteira.iter() {
+                        if no_fronteira.id_estacao == id_vizinho && 
+                           no_fronteira.linha_chegada == Some(conexao.cor_linha) &&
+                           no_fronteira.custo_g_viagem <= custo_g_novo {
+                            ja_tem_melhor_caminho = true;
+                            custo_g_existente = no_fronteira.custo_g_viagem;
+                            break;
+                        }
+                    }
+                }
+                
+                
+                self.estado_atual = EstadoAlgoritmo::AvaliandoVizinho { 
+                    indice_vizinho: indice + 1 
+                };
+                
+                // Primeiro retorna o evento de avaliação com os custos calculados
+                let evento_avaliacao = EventoVisual::AvaliandoVizinho {
+                    id_estacao_atual: no_atual.id_estacao,
+                    id_vizinho,
+                    linha_conexao: conexao.cor_linha,
+                    tempo_conexao: conexao.tempo_minutos,
+                    custo_baldeacao,
+                    custo_g_novo,
+                    custo_h,
+                    custo_f_novo,
+                };
+                
+                if ja_tem_melhor_caminho {
+                    // Na próxima chamada, retornará VizinhoJaTemCaminhoMelhor
+                    return evento_avaliacao;
+                } else {
+                    // Adicionar na fronteira - CONFORME LITERATURA A*
+                    self.custos_g_viagem_mapa.insert(estado_vizinho, custo_g_novo);
+                    self.predecessores_info.insert(
+                        id_vizinho, 
+                        (no_atual.id_estacao, no_atual.linha_chegada, conexao.cor_linha)
+                    );
+                    
+                    let mut novo_caminho = no_atual.caminho.clone();
+                    novo_caminho.push(id_vizinho);
+                    
+                    let novo_no = EstadoNoFronteira {
+                        id_estacao: id_vizinho,
+                        linha_chegada: Some(conexao.cor_linha),
+                        custo_f: custo_f_novo,
+                        custo_g_viagem: custo_g_novo,
+                        caminho: novo_caminho.clone(),
+                    };
+                    
+                    self.fronteira.push(novo_no);
+                    self.vizinhos_adicionados_neste_passo += 1;
+                    
+                    // Na próxima chamada, retornará VizinhoAdicionadoNaFronteira
+                    return evento_avaliacao;
+                }
+            },
+            
+            EstadoAlgoritmo::FinalizandoExpansao => {
+                let no_atual = self.no_atual.as_ref().unwrap();
+                self.status_estacoes.insert(no_atual.id_estacao, StatusEstacao::Explorada);
+                self.estado_atual = EstadoAlgoritmo::SelecionandoNoDaFronteira;
+                
+                EventoVisual::FimDaExpansaoDeNo {
+                    id_estacao: no_atual.id_estacao,
+                    vizinhos_adicionados: self.vizinhos_adicionados_neste_passo,
+                    tamanho_fronteira: self.fronteira.len(),
+                }
+            },
+            
+            EstadoAlgoritmo::CaminhoEncontrado => {
+                let no_final = self.no_atual.as_ref().unwrap();
+                let info_caminho = self.criar_info_caminho_do_no(no_final);
+                
+                EventoVisual::CaminhoEncontrado { info_caminho }
+            },
+            
+            EstadoAlgoritmo::SemCaminho => {
+                EventoVisual::NenhumCaminho
+            },
+        }
+    }
+
+    // Método legado mantido para compatibilidade (pode ser removido posteriormente)
     pub fn proximo_passo(&mut self) -> ResultadoPassoAEstrela {
         self.passo_atual += 1;
         println!("\n=== PASSO {} ===", self.passo_atual);
@@ -186,8 +516,8 @@ impl SolucionadorAEstrela {
                 return ResultadoPassoAEstrela::CaminhoEncontrado(info_caminho);
             }
             
-            // Ignorar estações já exploradas
-            if self.explorados.contains(&no_da_fronteira_atual.id_estacao) {
+            // Ignorar estações já exploradas - CORRIGIDO PARA USAR ESTADO COMPLETO
+            if self.explorados.contains(&(no_da_fronteira_atual.id_estacao, no_da_fronteira_atual.linha_chegada)) {
                 println!("  Estação E{} já explorada, pulando.", no_da_fronteira_atual.id_estacao + 1);
                 return ResultadoPassoAEstrela::EmProgresso;
             }
@@ -196,8 +526,8 @@ impl SolucionadorAEstrela {
             self.status_estacoes.insert(no_da_fronteira_atual.id_estacao, StatusEstacao::SelecionadaParaExpansao);
             self.estacao_sendo_explorada_no_momento = Some(no_da_fronteira_atual.id_estacao);
             
-            // Marcar como explorada
-            self.explorados.insert(no_da_fronteira_atual.id_estacao);
+            // Marcar como explorada - USANDO ESTADO COMPLETO
+            self.explorados.insert((no_da_fronteira_atual.id_estacao, no_da_fronteira_atual.linha_chegada));
             
             // Limpar vizinhos sendo analisados do passo anterior
             self.vizinhos_sendo_analisados.clear();
@@ -214,8 +544,9 @@ impl SolucionadorAEstrela {
                     // Adicionar à lista de vizinhos sendo analisados
                     self.vizinhos_sendo_analisados.insert(id_vizinho);
                     
-                    // Pula vizinhos já completamente explorados
-                    if self.explorados.contains(&id_vizinho) {
+                    // Pula vizinhos já completamente explorados - CORRIGIDO
+                    let estado_vizinho = (id_vizinho, Some(conexao.cor_linha));
+                    if self.explorados.contains(&estado_vizinho) {
                         println!("    Ignorando E{}: já explorado", id_vizinho + 1);
                         vizinhos_analisados.push(format!("E{}: já explorado", id_vizinho + 1));
                         continue;
@@ -241,18 +572,22 @@ impl SolucionadorAEstrela {
                     println!("      Analisando E{}: g={:.1}, h={:.1}, f={:.1}", 
                              id_vizinho + 1, custo_g_novo, custo_h, custo_f);
                     
-                    // Verificar se já existe um caminho melhor
+                    // Verificar se já existe um caminho melhor - CORRIGIDO CONFORME LITERATURA A*
                     let mut ja_tem_melhor_caminho = false;
                     
-                    if let Some(&custo_g_registrado) = self.custos_g_viagem_mapa.get(&id_vizinho) {
+                    // Verificar no mapa de custos g
+                    if let Some(&custo_g_registrado) = self.custos_g_viagem_mapa.get(&estado_vizinho) {
                         if custo_g_registrado <= custo_g_novo {
                             ja_tem_melhor_caminho = true;
                         }
                     }
                     
+                    // Verificar na fronteira
                     if !ja_tem_melhor_caminho {
                         for no_fronteira in self.fronteira.iter() {
-                            if no_fronteira.id_estacao == id_vizinho && no_fronteira.custo_g_viagem <= custo_g_novo {
+                            if no_fronteira.id_estacao == id_vizinho && 
+                               no_fronteira.linha_chegada == Some(conexao.cor_linha) &&
+                               no_fronteira.custo_g_viagem <= custo_g_novo {
                                 ja_tem_melhor_caminho = true;
                                 break;
                             }
@@ -260,8 +595,8 @@ impl SolucionadorAEstrela {
                     }
                     
                     if !ja_tem_melhor_caminho {
-                        // Registrar este novo caminho
-                        self.custos_g_viagem_mapa.insert(id_vizinho, custo_g_novo);
+                        // Registrar este novo caminho - USANDO ESTADO COMPLETO
+                        self.custos_g_viagem_mapa.insert(estado_vizinho, custo_g_novo);
                         self.predecessores_info.insert(
                             id_vizinho, 
                             (no_da_fronteira_atual.id_estacao, no_da_fronteira_atual.linha_chegada, conexao.cor_linha)
@@ -543,5 +878,51 @@ impl SolucionadorAEstrela {
     // Obtém status de uma estação
     pub fn obter_status_estacao(&self, id_estacao: IdEstacao) -> StatusEstacao {
         self.status_estacoes.get(&id_estacao).cloned().unwrap_or(StatusEstacao::Disponivel)
+    }
+
+    // Métodos auxiliares para controle de estado
+    pub fn esta_finalizado(&self) -> bool {
+        matches!(self.estado_atual, EstadoAlgoritmo::CaminhoEncontrado | EstadoAlgoritmo::SemCaminho)
+    }
+    
+    pub fn pode_continuar(&self) -> bool {
+        !self.esta_finalizado()
+    }
+    
+    pub fn reiniciar(&mut self) {
+        self.estado_atual = EstadoAlgoritmo::Inicializado;
+        self.no_atual = None;
+        self.vizinhos_atuais.clear();
+        self.indice_vizinho_atual = 0;
+        self.vizinhos_adicionados_neste_passo = 0;
+        self.explorados.clear();
+        self.status_estacoes.clear();
+        self.estacao_sendo_explorada_no_momento = None;
+        self.passo_atual = 0;
+        self.vizinhos_sendo_analisados.clear();
+        
+        // Reconstruir fronteira inicial
+        self.fronteira.clear();
+        self.custos_g_viagem_mapa.clear();
+        self.predecessores_info.clear();
+        
+        let custo_h_inicial = self.grafo
+            .obter_tempo_heuristico_minutos(self.id_inicio, self.id_objetivo)
+            .unwrap_or(0.0);
+        let custo_g_viagem_inicial = 0.0;
+        let custo_f_inicial = custo_g_viagem_inicial + custo_h_inicial;
+        
+        let mut caminho_inicial = Vec::new();
+        caminho_inicial.push(self.id_inicio);
+        
+        self.fronteira.push(EstadoNoFronteira {
+            id_estacao: self.id_inicio,
+            linha_chegada: self.linha_de_partida_busca,
+            custo_f: custo_f_inicial,
+            custo_g_viagem: custo_g_viagem_inicial,
+            caminho: caminho_inicial,
+        });
+        
+        self.custos_g_viagem_mapa.insert((self.id_inicio, self.linha_de_partida_busca), custo_g_viagem_inicial);
     }
 }
