@@ -13,13 +13,11 @@ pub fn desenhar_popups(
 ) -> Vec<AcaoPopup> {
     let mut acoes = Vec::new();
     
-    // Collect data needed before borrowing mutably
     let posicoes_estacoes = app.posicoes_estacoes_tela.clone();
     let zoom_nivel = app.zoom_nivel;
     let offset_rolagem = app.offset_rolagem;
     let grafo = app.grafo_metro.as_ref().map(|g| g.as_ref());
     
-    // Get the IDs and popup data separately
     let popup_data: Vec<_> = app.popups_info.iter()
         .filter(|(_, popup)| popup.visivel)
         .map(|(id, popup)| (*id, popup.clone()))
@@ -60,18 +58,15 @@ fn desenhar_popup_persistente(
                     ui.set_max_width(320.0);
                     ui.set_min_width(280.0);
                     
-                    // Cabeçalho com título arrastável e botão fechar
                     desenhar_cabecalho_popup(ui, id_estacao, acoes);
                     
                     ui.separator();
                     
-                    // Conteúdo do popup
                     desenhar_conteudo_popup(ui, popup);
                     
                     ui.add_space(6.0);
                     ui.separator();
                     
-                    // Rodapé
                     desenhar_rodape_popup(ui);
                 });
         });
@@ -84,7 +79,6 @@ fn desenhar_cabecalho_popup(ui: &mut egui::Ui, id_estacao: IdEstacao, acoes: &mu
             .color(egui::Color32::from_rgb(120, 150, 200))
             .strong());
         
-        // Título arrastável
         let title_response = ui.add(egui::Label::new(
             egui::RichText::new("Detalhes da Estação")
                 .size(14.0)
@@ -104,7 +98,6 @@ fn desenhar_cabecalho_popup(ui: &mut egui::Ui, id_estacao: IdEstacao, acoes: &mu
             });
         }
         
-        // Botão de fechar
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let close_button = egui::Button::new(
                 egui::RichText::new("×")
@@ -225,7 +218,7 @@ fn desenhar_rodape_popup(ui: &mut egui::Ui) {
     });
 }
 
-/// Processa ações dos popups (fechar, mover, etc.)
+/// Processa ações dos popups
 pub fn processar_acoes_popup(app: &mut MinhaAplicacaoGUI, acoes: Vec<AcaoPopup>) {
     for acao in acoes {
         match acao.tipo {
@@ -235,7 +228,7 @@ pub fn processar_acoes_popup(app: &mut MinhaAplicacaoGUI, acoes: Vec<AcaoPopup>)
                 }
             },
             TipoAcaoPopup::Iniciar => {
-                // Lógica para iniciar popup
+                
             },
             TipoAcaoPopup::MoverDelta => {
                 if let Some(delta) = acao.delta {
@@ -261,10 +254,8 @@ pub fn abrir_popup_estacao(app: &mut MinhaAplicacaoGUI, id_estacao: IdEstacao, g
     
     let mut conteudo = format!("Estação: {}\nID: E{}\n\n", estacao.nome, id_estacao + 1);
     
-    // Status da estação
     conteudo.push_str(&determinar_status_estacao(app, id_estacao));
     
-    // Informações de conectividade
     adicionar_informacoes_conectividade(&mut conteudo, grafo, id_estacao);
     
     conteudo.push_str("\nUse os controles do painel lateral para\n   selecionar início e destino");
@@ -317,7 +308,6 @@ fn adicionar_informacoes_conectividade(conteudo: &mut String, grafo: &GrafoMetro
         
         conteudo.push_str(&format!("\nTotal de conexões diretas: {}\n\n", conexoes.len()));
         
-        // Mostrar algumas conexões diretas
         conteudo.push_str("ESTAÇÕES CONECTADAS:\n");
         let mut conexoes_mostradas = 0;
         for conexao in conexoes.iter().take(5) {
@@ -557,7 +547,6 @@ fn desenhar_formula_astar(ui: &mut egui::Ui, f_val: f32, g_val: f32, h_val: f32)
 }
 
 fn desenhar_status_estacao_hover(app: &MinhaAplicacaoGUI, ui: &mut egui::Ui, id_estacao: IdEstacao) {
-    // Implementação similar ao código original, mas simplificada
     if id_estacao == app.id_estacao_inicio_selecionada {
         ui.label(egui::RichText::new("🚉 ESTAÇÃO DE INÍCIO").size(13.0).color(egui::Color32::from_rgb(100, 255, 100)).strong());
     } else if id_estacao == app.id_estacao_objetivo_selecionada {

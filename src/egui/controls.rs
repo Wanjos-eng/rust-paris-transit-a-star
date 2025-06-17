@@ -10,7 +10,6 @@ pub fn mostrar_painel_controles(app: &mut MinhaAplicacaoGUI, ctx: &egui::Context
             ui.heading("Controles A* Metrô");
             ui.separator();
             
-            // Seletores de estação
             mostrar_seletores_estacao(app, ui);
             
             ui.separator();
@@ -19,10 +18,8 @@ pub fn mostrar_painel_controles(app: &mut MinhaAplicacaoGUI, ctx: &egui::Context
                 .strong());
             ui.add_space(5.0);
             
-            // Botões de controle principais
             mostrar_botoes_controle_principal(app, ui);
             
-            // Botões de execução passo a passo
             if app.solucionador_a_estrela.is_some() {
                 mostrar_controles_passo_a_passo(app, ui);
             }
@@ -30,7 +27,6 @@ pub fn mostrar_painel_controles(app: &mut MinhaAplicacaoGUI, ctx: &egui::Context
             ui.separator();
             ui.label(&app.mensagem_status_ui);
             
-            // Resumo da rota
             if let Some(info_caminho) = &app.resultado_caminho_ui {
                 mostrar_resumo_rota(app, ui, info_caminho);
             }
@@ -65,7 +61,6 @@ fn mostrar_seletores_estacao(app: &mut MinhaAplicacaoGUI, ui: &mut egui::Ui) {
 }
 
 fn mostrar_botoes_controle_principal(app: &mut MinhaAplicacaoGUI, ui: &mut egui::Ui) {
-    // Aumentamos a largura para acomodar os botões de navegação lado a lado
     let tamanho_botao_padrao = egui::Vec2::new(220.0, 32.0);
     
     if ui.add_sized(tamanho_botao_padrao, egui::Button::new("Iniciar/Reiniciar Busca")).clicked() {
@@ -81,7 +76,6 @@ fn mostrar_botoes_controle_principal(app: &mut MinhaAplicacaoGUI, ui: &mut egui:
 }
 
 fn mostrar_controles_passo_a_passo(app: &mut MinhaAplicacaoGUI, ui: &mut egui::Ui) {
-    // Usar a mesma largura dos botões principais
     let tamanho_botao_padrao = egui::Vec2::new(220.0, 32.0);
     
     ui.add_space(8.0);
@@ -90,19 +84,15 @@ fn mostrar_controles_passo_a_passo(app: &mut MinhaAplicacaoGUI, ui: &mut egui::U
         .strong());
     ui.add_space(5.0);
     
-    // Obter informações do solucionador
     let (pode_voltar, num_passos_historico) = if let Some(ref solucionador) = app.solucionador_a_estrela {
         (solucionador.pode_voltar_passo(), solucionador.numero_passos_historico())
     } else {
         (false, 0)
     };
     
-    // Botões de navegação lado a lado - mesma largura total que outros botões
     ui.horizontal(|ui| {
-        // Cada botão de navegação terá exatamente metade da largura padrão
-        let tamanho_nav = egui::Vec2::new(108.0, 32.0); // 220/2 = 110, menos 2 para espaçamento
+        let tamanho_nav = egui::Vec2::new(108.0, 32.0);
         
-        // Botão Anterior
         let texto_ant = if num_passos_historico > 0 {
             format!("◀ Anterior ({})", num_passos_historico)
         } else {
@@ -129,7 +119,6 @@ fn mostrar_controles_passo_a_passo(app: &mut MinhaAplicacaoGUI, ui: &mut egui::U
         
         ui.add_space(4.0);
         
-        // Botão Próximo
         let btn_prox = egui::Button::new(egui::RichText::new("Próximo ▶").size(10.5))
             .fill(Color32::from_rgb(45, 55, 75))
             .stroke(egui::Stroke::new(1.5, Color32::from_rgb(100, 120, 160)));
@@ -158,14 +147,12 @@ fn mostrar_resumo_rota(app: &MinhaAplicacaoGUI, ui: &mut egui::Ui, info_caminho:
     ui.separator();
     ui.heading("Resumo da Rota");
     
-    // Frame destacado para informações principais
     egui::Frame::group(ui.style())
         .fill(egui::Color32::from_rgb(40, 42, 54))
         .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(80, 80, 100)))
         .corner_radius(egui::CornerRadius::same(8))
         .inner_margin(egui::Margin::same(8))
         .show(ui, |ui| {
-            // Métricas principais
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.add(egui::Label::new(
@@ -203,7 +190,6 @@ fn mostrar_resumo_rota(app: &MinhaAplicacaoGUI, ui: &mut egui::Ui, info_caminho:
     ui.add_space(8.0);
     ui.label(egui::RichText::new("Trajeto Completo:").strong());
     
-    // Tabela de trajeto
     mostrar_tabela_trajeto(app, ui, info_caminho);
 }
 
@@ -217,13 +203,11 @@ fn mostrar_tabela_trajeto(app: &MinhaAplicacaoGUI, ui: &mut egui::Ui, info_camin
                     .striped(true)
                     .spacing([8.0, 4.0])
                     .show(ui, |ui| {
-                        // Cabeçalho
                         ui.add(egui::Label::new(egui::RichText::new("#").strong()));
                         ui.add(egui::Label::new(egui::RichText::new("Estação").strong()));
                         ui.add(egui::Label::new(egui::RichText::new("Linha").strong()));
                         ui.end_row();
                         
-                        // Conteúdo
                         let mut linha_anterior: Option<crate::grafo_metro::CorLinha> = None;
                         for (idx, (id_est, linha_chegada_op)) in info_caminho.estacoes_do_caminho.iter().enumerate() {
                             let nome_est = &grafo.estacoes[*id_est].nome;
@@ -238,7 +222,6 @@ fn mostrar_tabela_trajeto(app: &MinhaAplicacaoGUI, ui: &mut egui::Ui, info_camin
                             
                             ui.label(label_idx);
                             
-                            // Destacar baldeações
                             let mut nome_estacao_texto = egui::RichText::new(nome_est);
                             if linha_chegada_op.is_some() && linha_anterior.is_some() && 
                                *linha_chegada_op != linha_anterior {
@@ -250,7 +233,6 @@ fn mostrar_tabela_trajeto(app: &MinhaAplicacaoGUI, ui: &mut egui::Ui, info_camin
                                 ui.label(nome_estacao_texto);
                             }
                             
-                            // Nome da linha com cor
                             let texto_linha = match linha_chegada_op {
                                 Some(cor) => {
                                     let cor_linha = match cor {
@@ -280,7 +262,6 @@ fn mostrar_opcoes_visualizacao(app: &mut MinhaAplicacaoGUI, ui: &mut egui::Ui) {
         .strong());
     ui.add_space(5.0);
     
-    // Controle de zoom
     ui.horizontal(|ui| {
         ui.label("Zoom:");
         ui.add_sized([140.0, 20.0], egui::Slider::new(&mut app.zoom_nivel, 0.5..=2.0)
@@ -290,7 +271,6 @@ fn mostrar_opcoes_visualizacao(app: &mut MinhaAplicacaoGUI, ui: &mut egui::Ui) {
     
     ui.add_space(5.0);
     
-    // Opções de visualização
     ui.label(egui::RichText::new("Exibir:")
         .size(12.0)
         .color(Color32::LIGHT_GRAY));

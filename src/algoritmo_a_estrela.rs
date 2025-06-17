@@ -10,7 +10,7 @@ pub struct EstadoNoFronteira {
     pub linha_chegada: Option<CorLinha>,
     pub custo_f: f32,
     pub custo_g_viagem: f32, 
-    pub caminho: Vec<IdEstacao>, // Adicionando o caminho percorrido até este nó
+    pub caminho: Vec<IdEstacao>,
 }
 
 impl EstadoNoFronteira {
@@ -32,7 +32,6 @@ impl EstadoNoFronteira {
     }
 }
 
-// Implementações de PartialEq, Eq, Ord, PartialOrd para EstadoNoFronteira
 impl PartialEq for EstadoNoFronteira {
     fn eq(&self, other: &Self) -> bool {
         self.id_estacao == other.id_estacao &&
@@ -44,7 +43,6 @@ impl PartialEq for EstadoNoFronteira {
 impl Eq for EstadoNoFronteira {}
 impl Ord for EstadoNoFronteira {
     fn cmp(&self, other: &Self) -> Ordering {
-        // Implementação min-heap direta, como no exemplo - menor custo_f tem maior prioridade
         match other.custo_f.partial_cmp(&self.custo_f) {
             Some(order) => order,
             None => Ordering::Equal
@@ -72,7 +70,6 @@ pub enum ResultadoPassoAEstrela {
     Erro(String),
 }
 
-// Novo enum para eventos visuais detalhados
 #[derive(Debug, Clone)]
 pub enum EventoVisual {
     NoEscolhidoDaFronteira {
@@ -134,7 +131,6 @@ pub enum EventoVisual {
     },
 }
 
-// Novo struct para detalhes da análise
 #[derive(Debug, Clone)]
 pub struct DetalhesAnalise {
     pub estacao_expandida: IdEstacao,
@@ -142,16 +138,14 @@ pub struct DetalhesAnalise {
     pub fronteira_atual: Vec<String>,
 }
 
-// Sistema de estados detalhados para visualização didática
 #[derive(Debug, Clone, PartialEq)]
 pub enum StatusEstacao {
     Disponivel,
-    SelecionadaParaExpansao,    // Tirada da fronteira, vai ser expandida
-    ExpandindoVizinhos,         // Analisando seus vizinhos
-    Explorada,                  // Completamente processada
+    SelecionadaParaExpansao,
+    ExpandindoVizinhos,
+    Explorada,
 }
 
-// Estados do algoritmo para controlar o fluxo de eventos
 #[derive(Debug, Clone, PartialEq)]
 pub enum EstadoAlgoritmo {
     Inicializado,
@@ -165,7 +159,6 @@ pub enum EstadoAlgoritmo {
     SemCaminho,
 }
 
-// Novo struct para armazenar o estado completo do algoritmo em um ponto específico
 #[derive(Debug, Clone)]
 pub struct SnapshotEstado {
     pub fronteira: BinaryHeap<EstadoNoFronteira>,
@@ -191,24 +184,22 @@ pub struct SolucionadorAEstrela {
     linha_de_partida_busca: Option<CorLinha>,
     id_objetivo: IdEstacao,
     pub fronteira: BinaryHeap<EstadoNoFronteira>,
-    pub explorados: HashSet<(IdEstacao, Option<CorLinha>)>, // Estado = (estação, linha)
-    custos_g_viagem_mapa: HashMap<(IdEstacao, Option<CorLinha>), f32>, // Estado completo como chave
+    pub explorados: HashSet<(IdEstacao, Option<CorLinha>)>,
+    custos_g_viagem_mapa: HashMap<(IdEstacao, Option<CorLinha>), f32>,
     predecessores_info: HashMap<IdEstacao, (IdEstacao, Option<CorLinha>, CorLinha)>,
-    pub ultima_analise: Option<DetalhesAnalise>, // Novo campo para armazenar detalhes da última análise
-    pub status_estacoes: HashMap<IdEstacao, StatusEstacao>, // Status de cada estação
-    pub estacao_sendo_explorada_no_momento: Option<IdEstacao>, // Estação que está sendo explorada neste momento
-    pub passo_atual: usize, // Contador de passos para controle didático
-    pub vizinhos_sendo_analisados: HashSet<IdEstacao>, // Vizinhos sendo analisados no passo atual
+    pub ultima_analise: Option<DetalhesAnalise>,
+    pub status_estacoes: HashMap<IdEstacao, StatusEstacao>,
+    pub estacao_sendo_explorada_no_momento: Option<IdEstacao>,
+    pub passo_atual: usize,
+    pub vizinhos_sendo_analisados: HashSet<IdEstacao>,
     
-    // Novos campos para controle de estado do algoritmo
     estado_atual: EstadoAlgoritmo,
     no_atual: Option<EstadoNoFronteira>,
     vizinhos_atuais: Vec<crate::grafo_metro::Conexao>,
     indice_vizinho_atual: usize,
     vizinhos_adicionados_neste_passo: usize,
     
-    // Campos para controle de histórico e navegação pelos passos
-    historico_estados: Vec<SnapshotEstado>, // Histórico de estados anteriores
+    historico_estados: Vec<SnapshotEstado>,
     max_historico: usize, // Limite máximo de estados no histórico
 }
 

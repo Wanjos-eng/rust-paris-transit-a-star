@@ -60,17 +60,14 @@ fn desenhar_marcador(
         tamanho_texto.rect.size() + padding * 2.0
     );
     
-    // Sombra
     painter.rect_filled(
         rect_fundo.translate(Vec2::new(1.0, 1.0) * app.zoom_nivel),
         3.0 * app.zoom_nivel,
         Color32::from_rgba_premultiplied(0, 0, 0, 120)
     );
     
-    // Fundo principal
     painter.rect_filled(rect_fundo, 3.0 * app.zoom_nivel, cor_fundo);
     
-    // Borda
     painter.rect_stroke(
         rect_fundo,
         3.0 * app.zoom_nivel,
@@ -78,10 +75,8 @@ fn desenhar_marcador(
         egui::StrokeKind::Middle
     );
     
-    // Texto
     painter.text(pos_marcador, egui::Align2::CENTER_CENTER, texto, fonte, Color32::WHITE);
     
-    // Seta apontando para a estação
     desenhar_seta_marcador(app, painter, pos_marcador, pos_estacao, rect_fundo, cor_borda);
 }
 
@@ -96,13 +91,11 @@ fn desenhar_seta_marcador(
     let pos_seta_inicio = pos_marcador + Vec2::new(0.0, rect_fundo.height() / 2.0);
     let pos_seta_fim = pos_estacao + Vec2::new(0.0, -22.0 * app.zoom_nivel);
     
-    // Linha da seta
     painter.line_segment(
         [pos_seta_inicio, pos_seta_fim],
         Stroke::new(1.5 * app.zoom_nivel, cor_borda)
     );
     
-    // Ponta da seta
     let tamanho_ponta = 3.0 * app.zoom_nivel;
     let ponta1 = pos_seta_fim + Vec2::new(-tamanho_ponta, -tamanho_ponta);
     let ponta2 = pos_seta_fim + Vec2::new(tamanho_ponta, -tamanho_ponta);

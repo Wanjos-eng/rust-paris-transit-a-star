@@ -124,14 +124,11 @@ impl MinhaAplicacaoGUI {
 
 impl eframe::App for MinhaAplicacaoGUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Painel de controles lateral
         super::controls::mostrar_painel_controles(self, ctx);
 
-        // Painel principal de visualização
         egui::CentralPanel::default().show(ctx, |ui| {
             let tamanho_disponivel = ui.available_size();
 
-            // Centralização inicial
             if !self.ja_centralizou {
                 super::navigation::centralizar_visualizacao(self, tamanho_disponivel);
                 self.ja_centralizou = true;
@@ -147,27 +144,22 @@ impl eframe::App for MinhaAplicacaoGUI {
                     super::navigation::processar_eventos_navegacao(self, ui, &response, rect_desenho);
                 }
 
-                // Fundo do canvas
                 painter.rect_filled(rect_desenho, 0.0, Color32::from_gray(30));
 
-                // Obter referência ao grafo
                 let grafo_clone = match &self.grafo_metro {
                     Some(grafo_arc) => grafo_arc.clone(),
                     None => return,
                 };
                 let grafo_ref = &*grafo_clone;
                 
-                // Desenhar elementos
                 super::drawing::desenhar_conexoes(self, &painter, rect_desenho, grafo_ref);
                 super::drawing::desenhar_estacoes(self, &painter, rect_desenho, grafo_ref, ui);
                 super::visual_effects::desenhar_marcadores_estacoes(self, &painter, rect_desenho, grafo_ref, ui);
                 
-                // Processar popups
                 let acoes_popup = super::popups::desenhar_popups(self, ui, rect_desenho, grafo_ref);
                 super::popups::processar_acoes_popup(self, acoes_popup);
             });
 
-            // Controle de repaint para animações
             let precisa_repaint = self.solucionador_a_estrela.is_some() || !self.vizinhos_sendo_analisados_ui.is_empty();
             if precisa_repaint {
                 let tempo = ctx.input(|i| i.time) as f32;

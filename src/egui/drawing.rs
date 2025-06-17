@@ -4,10 +4,7 @@ use super::app::MinhaAplicacaoGUI;
 
 /// Desenha todas as conexões entre estações
 pub fn desenhar_conexoes(app: &MinhaAplicacaoGUI, painter: &egui::Painter, rect_desenho: egui::Rect, grafo: &GrafoMetro) {
-    // Desenhar conexões normais (não na solução)
     desenhar_conexoes_normais(app, painter, rect_desenho, grafo);
-    
-    // Desenhar o caminho da solução destacado
     desenhar_caminho_solucao(app, painter, rect_desenho, grafo);
 }
 
@@ -16,26 +13,21 @@ fn desenhar_conexoes_normais(app: &MinhaAplicacaoGUI, painter: &egui::Painter, r
         for conexao in conexoes {
             let id_destino = conexao.para_estacao;
             
-            // Verificar se esta conexão faz parte da solução
             let na_solucao = esta_na_solucao(app, id_origem, id_destino, conexao.cor_linha);
             if na_solucao {
-                continue; // Pular conexões da solução
+                continue;
             }
             
-            // Posições das estações
             let pos_origem = app.posicoes_estacoes_tela[id_origem] * app.zoom_nivel + app.offset_rolagem + rect_desenho.min.to_vec2();
             let pos_destino = app.posicoes_estacoes_tela[id_destino] * app.zoom_nivel + app.offset_rolagem + rect_desenho.min.to_vec2();
             
-            // Cor e espessura da linha
             let (cor_linha, espessura) = obter_cor_linha(conexao.cor_linha);
             
-            // Desenhar linha com opacidade reduzida
             painter.line_segment(
                 [pos_origem, pos_destino], 
                 Stroke::new(espessura * app.zoom_nivel, cor_linha.gamma_multiply(0.3))
             );
             
-            // Desenhar tempo da conexão se ativado
             if app.mostrar_tempos_conexao {
                 let meio = (pos_origem + pos_destino.to_vec2()) / 2.0;
                 let texto_tempo = format!("{:.1}", conexao.tempo_minutos);
@@ -56,10 +48,9 @@ fn desenhar_conexoes_normais(app: &MinhaAplicacaoGUI, painter: &egui::Painter, r
 
 fn desenhar_caminho_solucao(app: &MinhaAplicacaoGUI, painter: &egui::Painter, rect_desenho: egui::Rect, grafo: &GrafoMetro) {
     if let Some(ref caminho_info) = app.resultado_caminho_ui {
-        let cor_solucao = Color32::from_rgb(0, 150, 136); // Verde-azul escuro
+        let cor_solucao = Color32::from_rgb(0, 150, 136);
         let espessura_solucao = 6.5 * app.zoom_nivel;
         
-        // Desenhar cada segmento do caminho
         for i in 0..caminho_info.estacoes_do_caminho.len().saturating_sub(1) {
             let (id_origem, _) = caminho_info.estacoes_do_caminho[i];
             let (id_destino, _) = caminho_info.estacoes_do_caminho[i+1];
@@ -67,19 +58,16 @@ fn desenhar_caminho_solucao(app: &MinhaAplicacaoGUI, painter: &egui::Painter, re
             let pos_origem = app.posicoes_estacoes_tela[id_origem] * app.zoom_nivel + app.offset_rolagem + rect_desenho.min.to_vec2();
             let pos_destino = app.posicoes_estacoes_tela[id_destino] * app.zoom_nivel + app.offset_rolagem + rect_desenho.min.to_vec2();
             
-            // Linha principal com brilho
             painter.line_segment(
                 [pos_origem, pos_destino], 
                 Stroke::new(espessura_solucao, cor_solucao)
             );
             
-            // Efeito de brilho externo
             painter.line_segment(
                 [pos_origem, pos_destino], 
                 Stroke::new(espessura_solucao + 2.0, Color32::from_rgba_premultiplied(0, 100, 80, 40))
             );
             
-            // Desenhar tempo da conexão se ativado
             if app.mostrar_tempos_conexao {
                 let tempo = obter_tempo_conexao(grafo, id_origem, id_destino);
                 let meio = (pos_origem + pos_destino.to_vec2()) / 2.0;
@@ -96,7 +84,6 @@ fn desenhar_caminho_solucao(app: &MinhaAplicacaoGUI, painter: &egui::Painter, re
                 );
             }
             
-            // Desenhar ícones de baldeação
             desenhar_icones_baldeacao(app, painter, rect_desenho, caminho_info, i);
         }
     }
@@ -121,19 +108,15 @@ pub fn desenhar_estacoes(app: &mut MinhaAplicacaoGUI, painter: &egui::Painter, r
             false
         };
         
-        // Desenhar efeitos visuais
         desenhar_efeitos_estacao(app, painter, pos, e_vizinho_sendo_analisado, e_sendo_explorada_agora);
         
-        // Desenhar círculo da estação
         desenhar_circulo_estacao(app, painter, pos, i, grafo);
         
-        // Processar interação com a estação
         processar_interacao_estacao(app, ui, pos, i, grafo);
     }
 }
 
 fn desenhar_efeitos_estacao(app: &MinhaAplicacaoGUI, painter: &egui::Painter, pos: Pos2, e_vizinho: bool, e_explorando: bool) {
-    // Efeito para vizinhos sendo analisados
     if e_vizinho {
         painter.circle_stroke(
             pos,
@@ -148,7 +131,6 @@ fn desenhar_efeitos_estacao(app: &MinhaAplicacaoGUI, painter: &egui::Painter, po
         );
     }
     
-    // Efeito para estação sendo explorada
     if e_explorando {
         painter.circle_stroke(
             pos,
@@ -165,24 +147,20 @@ fn desenhar_efeitos_estacao(app: &MinhaAplicacaoGUI, painter: &egui::Painter, po
 }
 
 fn desenhar_circulo_estacao(app: &MinhaAplicacaoGUI, painter: &egui::Painter, pos: Pos2, id_estacao: IdEstacao, grafo: &GrafoMetro) {
-    // Cor de preenchimento baseada no status
     let cor_preenchimento = obter_cor_preenchimento_estacao(app, id_estacao);
     
-    // Sombra
     painter.circle_filled(
         pos + Vec2::new(1.5, 1.5) * app.zoom_nivel,
         18.0 * app.zoom_nivel,
         Color32::from_rgba_premultiplied(0, 0, 0, 160)
     );
     
-    // Círculo principal
     painter.circle_filled(
         pos,
         18.0 * app.zoom_nivel,
         cor_preenchimento
     );
     
-    // Borda
     let (cor_borda, espessura_borda) = obter_cor_borda_estacao(app, id_estacao);
     painter.circle_stroke(
         pos, 
@@ -190,7 +168,6 @@ fn desenhar_circulo_estacao(app: &MinhaAplicacaoGUI, painter: &egui::Painter, po
         Stroke::new(espessura_borda * app.zoom_nivel, cor_borda)
     );
     
-    // ID da estação
     if app.mostrar_ids_estacoes {
         painter.text(
             pos,
@@ -201,7 +178,6 @@ fn desenhar_circulo_estacao(app: &MinhaAplicacaoGUI, painter: &egui::Painter, po
         );
     }
     
-    // Nome da estação para estações relevantes
     let mostrar_nome = app.resultado_caminho_ui.as_ref()
         .map(|info| info.estacoes_do_caminho.iter().any(|(id, _)| *id == id_estacao))
         .unwrap_or(false) ||

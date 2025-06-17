@@ -9,7 +9,7 @@ pub fn centralizar_visualizacao(app: &mut MinhaAplicacaoGUI, tamanho_disponivel:
     app.offset_rolagem = centro - centro_grafo * app.zoom_nivel;
 }
 
-/// Processa eventos de navegação (arrastar, zoom)
+/// Processa eventos de navegação
 pub fn processar_eventos_navegacao(
     app: &mut MinhaAplicacaoGUI, 
     ui: &mut egui::Ui, 
@@ -46,7 +46,6 @@ fn processar_zoom(
             let fator_zoom = if scroll_delta > 0.0 { 1.1 } else { 0.9 };
             let novo_zoom = (app.zoom_nivel * fator_zoom).clamp(0.3, 2.5);
             
-            // Zoom relativo à posição do mouse
             if let Some(pos_mouse) = ui.input(|i| i.pointer.interact_pos()) {
                 let pos_antes = (pos_mouse - rect_desenho.min.to_vec2() - app.offset_rolagem) / app.zoom_nivel;
                 app.zoom_nivel = novo_zoom;

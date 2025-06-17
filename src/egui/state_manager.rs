@@ -19,14 +19,11 @@ pub fn iniciar_busca_a_estrela(app: &mut MinhaAplicacaoGUI) {
         let id_inicio = app.id_estacao_inicio_selecionada;
         let id_objetivo = app.id_estacao_objetivo_selecionada;
         
-        // Extrair nomes das estações antes de limpar o estado
         let nome_inicio = grafo.estacoes[id_inicio].nome.clone();
         let nome_objetivo = grafo.estacoes[id_objetivo].nome.clone();
         
-        // Resetar estado
         limpar_estado_visual(app);
         
-        // Criar o solucionador
         let solucionador = SolucionadorAEstrela::novo(
             grafo_arco,
             id_inicio,
@@ -82,13 +79,10 @@ pub fn executar_proximo_passo_a_estrela(app: &mut MinhaAplicacaoGUI) {
 }
 
 fn processar_passo_em_progresso_dados(app: &mut MinhaAplicacaoGUI, analise: &crate::algoritmo_a_estrela::DetalhesAnalise) {
-        // A estação que foi expandida
         app.estacao_sendo_expandida_ui = Some(analise.estacao_expandida);
         
-        // Adicionar às exploradas
         app.estacoes_exploradas_ui.insert(analise.estacao_expandida);
         
-        // Extrair vizinhos sendo analisados
         app.vizinhos_sendo_analisados_ui.clear();
         for vizinho_info in &analise.vizinhos_analisados {
             if let Some(id_estacao) = extrair_id_estacao_de_info(vizinho_info) {
@@ -98,7 +92,6 @@ fn processar_passo_em_progresso_dados(app: &mut MinhaAplicacaoGUI, analise: &cra
             }
         }
         
-        // Atualizar detalhes da análise
         app.detalhes_analise_ui = analise.vizinhos_analisados.clone();
         
         let nome_estacao = if let Some(ref grafo) = app.grafo_metro {
@@ -117,11 +110,9 @@ fn processar_passo_em_progresso_dados(app: &mut MinhaAplicacaoGUI, analise: &cra
 fn processar_caminho_encontrado(app: &mut MinhaAplicacaoGUI, caminho_info: crate::algoritmo_a_estrela::InfoCaminho) {
     app.resultado_caminho_ui = Some(caminho_info.clone());
     
-    // Limpar estados temporários
     app.estacao_sendo_expandida_ui = None;
     app.vizinhos_sendo_analisados_ui.clear();
     
-    // Marcar estações do caminho final como exploradas
     app.estacoes_exploradas_ui.clear();
     for (id_estacao, _) in &caminho_info.estacoes_do_caminho {
         app.estacoes_exploradas_ui.insert(*id_estacao);
@@ -157,7 +148,7 @@ fn extrair_id_estacao_de_info(vizinho_info: &str) -> Option<usize> {
                 let numero_str = &vizinho_info[inicio_e + 1..pos_dois_pontos];
                 if let Ok(id_estacao_um_baseado) = numero_str.parse::<usize>() {
                     if id_estacao_um_baseado > 0 {
-                        return Some(id_estacao_um_baseado - 1); // Converter para zero-based
+                        return Some(id_estacao_um_baseado - 1);
                     }
                 }
             }
@@ -169,7 +160,6 @@ fn extrair_id_estacao_de_info(vizinho_info: &str) -> Option<usize> {
 /// Atualiza o estado visual da GUI com base no solucionador atual
 pub fn atualizar_estado_visual_do_solucionador(app: &mut MinhaAplicacaoGUI) {
     if let Some(ref solucionador) = app.solucionador_a_estrela {
-        // Atualizar estações exploradas
         app.estacoes_exploradas_ui.clear();
         for (id_estacao, status) in &solucionador.status_estacoes {
             match status {
@@ -180,13 +170,10 @@ pub fn atualizar_estado_visual_do_solucionador(app: &mut MinhaAplicacaoGUI) {
             }
         }
         
-        // Atualizar estação sendo explorada no momento
         app.estacao_sendo_expandida_ui = solucionador.estacao_sendo_explorada_no_momento;
         
-        // Atualizar vizinhos sendo analisados
         app.vizinhos_sendo_analisados_ui = solucionador.vizinhos_sendo_analisados.clone();
         
-        // Atualizar detalhes da análise se disponível
         if let Some(ref analise) = solucionador.ultima_analise {
             app.detalhes_analise_ui = analise.vizinhos_analisados.clone();
         } else {
